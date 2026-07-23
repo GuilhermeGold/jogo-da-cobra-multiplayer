@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Snake Battle Royale</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="join-screen" class="overlay">
+    <div class="panel">
+      <h1>🐍 Snake Battle Royale</h1>
+      <p>Digite seu apelido e entre na arena. Último vivo vence!</p>
+      <form id="join-form">
+        <input id="nickname-input" type="text" maxlength="16" placeholder="Seu apelido" autocomplete="off" required />
+        <button type="submit">Entrar</button>
+      </form>
+      <p id="join-error" class="error"></p>
+    </div>
+  </div>
+
+  <div id="game-screen" class="hidden">
+    <div id="hud">
+      <div id="scoreboard"></div>
+      <div id="round-message"></div>
+    </div>
+    <canvas id="game-canvas"></canvas>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="client.js"></script>
+</body>
+</html>

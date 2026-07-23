@@ -1,0 +1,14 @@
+name: Keep Render service awake
+
+on:
+  schedule:
+    # 6h no horário de Brasília (UTC-3, sem horário de verão) = 9h UTC
+    - cron: '0 9 * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping health endpoint
+        run: curl -sf --max-time 40 https://jogo-da-cobra-multiplayer.onrender.com/health
