@@ -24,6 +24,7 @@ const ROUND_END_DISPLAY_MS = 4000;
 const ROUND_WIN_BONUS = 5; // pontos extras para quem vence a rodada
 const OBSTACLE_INTERVAL_MS = 8000; // cria um novo obstáculo a cada x segundos
 const OBSTACLE_MAX = 30;
+const SPAWN_MARGIN = 10; // distância mínima da lava ao nascer, para dar tempo de reação
 
 const COLORS = [
   '#ff5555', '#50fa7b', '#8be9fd', '#ffb86c',
@@ -67,7 +68,7 @@ function randomEmptyCell(margin = 0) {
 
 function spawnFood() {
   while (food.length < FOOD_COUNT) {
-    food.push(randomEmptyCell());
+    food.push(randomEmptyCell(1));
   }
 }
 
@@ -89,7 +90,7 @@ function nextColor() {
 }
 
 function spawnPlayer(player) {
-  const cell = randomEmptyCell(4);
+  const cell = randomEmptyCell(SPAWN_MARGIN);
   const dirKeys = Object.keys(DIRECTIONS);
   const dir = DIRECTIONS[dirKeys[Math.floor(Math.random() * dirKeys.length)]];
   player.body = [{ x: cell.x, y: cell.y }];
@@ -190,7 +191,7 @@ function tick() {
   for (const p of alivePlayers) {
     const head = newHeads.get(p.id);
 
-    if (head.x < 0 || head.x >= GRID_COLS || head.y < 0 || head.y >= GRID_ROWS) {
+    if (head.x <= 0 || head.x >= GRID_COLS - 1 || head.y <= 0 || head.y >= GRID_ROWS - 1) {
       deaths.add(p.id);
       continue;
     }

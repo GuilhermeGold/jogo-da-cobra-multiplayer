@@ -191,6 +191,18 @@ function drawEntities(state, t) {
         CELL_SIZE - pad * 2
       );
     });
+
+    const head = p.body[0];
+    const tx = Math.min(canvas.width - 4, Math.max(4, head.x * CELL_SIZE + CELL_SIZE / 2));
+    const ty = Math.max(12, head.y * CELL_SIZE - 6);
+    ctx.font = 'bold 12px Segoe UI, Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+    ctx.strokeText(p.nickname, tx, ty);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(p.nickname, tx, ty);
   }
 }
 
