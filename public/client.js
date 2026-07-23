@@ -10,14 +10,33 @@ const canvas = document.getElementById('game-canvas');
 const ctx = canvas.getContext('2d');
 const scoreboard = document.getElementById('scoreboard');
 const roundMessage = document.getElementById('round-message');
+const startBtn = document.getElementById('start-btn');
 
-const socket = io();
+const socket = io({ transports: ['websocket'] });
 let myId = null;
 let gridCols = 0;
 let gridRows = 0;
 let latestState = null;
 let currentRoundState = 'waiting';
 let countdownValue = null;
+let hostId = null;
+let waitingNeeded = null;
+
+startBtn.addEventListener('click', () => {
+  socket.emit('startGame');
+});
+
+function updateStartButton() {
+  const isHost = myId != null && hostId === myId;
+  if (currentRoundState !== 'waiting' || !isHost) {
+    startBtn.classList.add('hidden');
+    return;
+  }
+  startBtn.classList.remove('hidden');
+  const ready = waitingNeeded === 0;
+  startBtn.disabled = !ready;
+  startBtn.textContent = ready ? 'Iniciar partida' : 'Aguardando jogadores...';
+}
 
 joinForm.addEventListener('submit', e => {
   e.preventDefault();
@@ -43,12 +62,19 @@ socket.on('joined', ({ id, grid }) => {
 socket.on('roundEvent', event => {
   currentRoundState = event.type === 'start' ? 'playing' : event.type === 'end' ? 'ended' : event.type;
   switch (event.type) {
-    case 'waiting':
+    case 'waiting': {
       countdownValue = null;
-      roundMessage.textContent = event.needed > 0
-        ? `Aguardando mais ${event.needed} jogador(es) para começar...`
-        : 'Aguardando jogadores...';
+      waitingNeeded = event.needed;
+      const isHost = myId != null && hostId === myId;
+      if (event.needed > 0) {
+        roundMessage.textContent = `Aguardando mais ${event.needed} jogador(es) para começar...`;
+      } else {
+        roundMessage.textContent = isHost
+          ? 'Jogadores suficientes! Inicie quando quiser.'
+          : 'Aguardando o host iniciar a partida...';
+      }
       break;
+    }
     case 'countdown':
       countdownValue = event.seconds;
       roundMessage.textContent = `Começando em ${event.seconds}...`;
@@ -64,11 +90,14 @@ socket.on('roundEvent', event => {
         : 'Empate! Ninguém sobreviveu.';
       break;
   }
+  updateStartButton();
 });
 
 socket.on('state', state => {
   latestState = state;
+  hostId = state.hostId;
   renderScoreboard(state);
+  updateStartButton();
 });
 
 function lerpColor(a, b, t) {
@@ -99,12 +128,43 @@ function drawLavaBorder(t) {
   }
 }
 
-function drawEntities(state) {
-  ctx.fillStyle = '#7a5c3e';
+function drawObstacle(o, t) {
+  const cx = o.x * CELL_SIZE + CELL_SIZE / 2;
+  const cy = o.y * CELL_SIZE + CELL_SIZE / 2;
+  const pulse = 0.5 + 0.5 * Math.sin(t * 4 + o.x * 0.7 + o.y * 0.7);
+
+  const glowRadius = CELL_SIZE * 0.9 + pulse * 5;
+  const gradient = ctx.createRadialGradient(cx, cy, 1, cx, cy, glowRadius);
+  gradient.addColorStop(0, `rgba(255,45,170,${0.55 + 0.3 * pulse})`);
+  gradient.addColorStop(1, 'rgba(255,45,170,0)');
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  ctx.arc(cx, cy, glowRadius, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = '#2b2b2b';
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - CELL_SIZE * 0.45);
+  ctx.lineTo(cx + CELL_SIZE * 0.42, cy - CELL_SIZE * 0.08);
+  ctx.lineTo(cx + CELL_SIZE * 0.28, cy + CELL_SIZE * 0.45);
+  ctx.lineTo(cx - CELL_SIZE * 0.28, cy + CELL_SIZE * 0.45);
+  ctx.lineTo(cx - CELL_SIZE * 0.42, cy - CELL_SIZE * 0.08);
+  ctx.closePath();
+  ctx.fill();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = `rgba(255,80,190,${0.7 + 0.3 * pulse})`;
+  ctx.stroke();
+
+  ctx.fillStyle = '#ffe14d';
+  ctx.fillRect(cx - 1.5, cy - CELL_SIZE * 0.22, 3, CELL_SIZE * 0.28);
+  ctx.beginPath();
+  ctx.arc(cx, cy + CELL_SIZE * 0.16, 2, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawEntities(state, t) {
   for (const o of state.obstacles) {
-    ctx.fillRect(o.x * CELL_SIZE + 1, o.y * CELL_SIZE + 1, CELL_SIZE - 2, CELL_SIZE - 2);
-    ctx.strokeStyle = '#3f2f1f';
-    ctx.strokeRect(o.x * CELL_SIZE + 1, o.y * CELL_SIZE + 1, CELL_SIZE - 2, CELL_SIZE - 2);
+    drawObstacle(o, t);
   }
 
   ctx.fillStyle = '#f1fa8c';
@@ -149,9 +209,10 @@ function drawCountdownOverlay() {
 
 function frame(timestamp) {
   if (canvas.width && canvas.height) {
+    const t = timestamp / 1000;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    drawLavaBorder(timestamp / 1000);
-    if (latestState) drawEntities(latestState);
+    drawLavaBorder(t);
+    if (latestState) drawEntities(latestState, t);
     drawCountdownOverlay();
   }
   requestAnimationFrame(frame);

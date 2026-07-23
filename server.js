@@ -14,7 +14,7 @@ app.get('/health', (_req, res) => res.status(200).send('ok'));
 // ---- Configuração do jogo ----
 const GRID_COLS = 60;
 const GRID_ROWS = 40;
-const TICK_RATE_MS = 130;
+const TICK_RATE_MS = 90;
 const MAX_PLAYERS = 8;
 const MIN_PLAYERS_TO_START = 2;
 const FOOD_COUNT = 25;
@@ -42,6 +42,7 @@ const players = new Map();
 let food = []; // [{x,y}]
 let obstacles = []; // [{x,y}]
 let roundState = 'waiting'; // waiting | countdown | playing | ended
+let hostId = null;
 let roundTimer = null;
 let obstacleTimer = null;
 let tickInterval = null;
@@ -263,6 +264,7 @@ function serializeState() {
   return {
     grid: { cols: GRID_COLS, rows: GRID_ROWS },
     roundState,
+    hostId,
     food,
     obstacles,
     players: [...players.values()].map(p => ({
@@ -298,18 +300,23 @@ io.on('connection', socket => {
     };
     players.set(socket.id, player);
 
-    if (!player.spectating && (roundState === 'waiting' || roundState === 'ended')) {
-      // será posicionado quando a rodada (re)começar
+    if (!hostId || !players.has(hostId)) {
+      hostId = socket.id;
     }
 
     socket.emit('joined', { id: socket.id, grid: { cols: GRID_COLS, rows: GRID_ROWS } });
     io.emit('state', serializeState());
 
-    if (roundState === 'waiting' && connectedCount() >= MIN_PLAYERS_TO_START) {
-      startCountdown();
-    } else if (roundState === 'waiting') {
-      broadcastRoundEvent('waiting', { needed: MIN_PLAYERS_TO_START - connectedCount() });
+    if (roundState === 'waiting') {
+      broadcastRoundEvent('waiting', { needed: Math.max(0, MIN_PLAYERS_TO_START - connectedCount()) });
     }
+  });
+
+  socket.on('startGame', () => {
+    if (socket.id !== hostId) return;
+    if (roundState !== 'waiting') return;
+    if (connectedCount() < MIN_PLAYERS_TO_START) return;
+    startCountdown();
   });
 
   socket.on('direction', dirName => {
@@ -323,17 +330,25 @@ io.on('connection', socket => {
   });
 
   socket.on('disconnect', () => {
+    const wasHost = socket.id === hostId;
     players.delete(socket.id);
+    if (wasHost) {
+      hostId = players.size > 0 ? players.keys().next().value : null;
+    }
     io.emit('state', serializeState());
     if (roundState === 'playing') {
       const stillAlive = [...players.values()].filter(p => p.alive);
       if (stillAlive.length <= 1) {
         endRound(stillAlive[0] || null);
       }
-    } else if (connectedCount() < MIN_PLAYERS_TO_START) {
-      clearRoundTimer();
-      roundState = 'waiting';
-      broadcastRoundEvent('waiting', { needed: MIN_PLAYERS_TO_START - connectedCount() });
+    } else {
+      if (connectedCount() < MIN_PLAYERS_TO_START) {
+        clearRoundTimer();
+        roundState = 'waiting';
+      }
+      if (roundState === 'waiting') {
+        broadcastRoundEvent('waiting', { needed: Math.max(0, MIN_PLAYERS_TO_START - connectedCount()) });
+      }
     }
   });
 });
