@@ -25,6 +25,9 @@ const ROUND_WIN_BONUS = 5; // pontos extras para quem vence a rodada
 const OBSTACLE_INTERVAL_MS = 8000; // cria um novo obstáculo a cada x segundos
 const OBSTACLE_MAX = 30;
 const SPAWN_MARGIN = 10; // distância mínima da borda ao nascer, para dar tempo de reação
+const SURVIVAL_WIN_POINTS = 1; // pontos por vencer a rodada no modo Sobrevivência
+const GEM_INTERVAL_MS = 15000; // intervalo de spawn da gema especial (modo Sobrevivência)
+const INVINCIBLE_MS = 5000; // duração da invencibilidade concedida pela gema
 
 const COLORS = [
   '#ff5555', '#50fa7b', '#8be9fd', '#ffb86c',
@@ -42,15 +45,19 @@ const DIRECTIONS = {
 const players = new Map();
 let food = []; // [{x,y}]
 let obstacles = []; // [{x,y}]
+let gem = null; // {x,y} | null — só existe no modo Sobrevivência
+let gameMode = 'classic'; // classic | survival
 let roundState = 'waiting'; // waiting | countdown | playing | ended
 let hostId = null;
 let roundTimer = null;
 let obstacleTimer = null;
+let gemTimer = null;
 let tickInterval = null;
 
 function isCellFree(x, y, ignoreFood = false) {
   if (!ignoreFood && food.some(f => f.x === x && f.y === y)) return false;
   if (obstacles.some(o => o.x === x && o.y === y)) return false;
+  if (gem && gem.x === x && gem.y === y) return false;
   for (const p of players.values()) {
     if (p.body.some(seg => seg.x === x && seg.y === y)) return false;
   }
@@ -84,6 +91,19 @@ function startObstacleTimer() {
   }, OBSTACLE_INTERVAL_MS);
 }
 
+function spawnGem() {
+  if (gem) return;
+  gem = randomEmptyCell(3);
+}
+
+function startGemTimer() {
+  clearInterval(gemTimer);
+  if (gameMode !== 'survival') return;
+  gemTimer = setInterval(() => {
+    if (roundState === 'playing') spawnGem();
+  }, GEM_INTERVAL_MS);
+}
+
 function nextColor() {
   const used = new Set([...players.values()].map(p => p.color));
   return COLORS.find(c => !used.has(c)) || COLORS[players.size % COLORS.length];
@@ -99,6 +119,7 @@ function spawnPlayer(player) {
   player.alive = true;
   player.spectating = false;
   player.growth = START_GROWTH;
+  player.invincibleUntil = 0;
 }
 
 function connectedCount() {
@@ -152,6 +173,7 @@ function startCountdown() {
 function startRound() {
   food = [];
   obstacles = [];
+  gem = null;
   for (const p of players.values()) {
     spawnPlayer(p);
   }
@@ -159,13 +181,17 @@ function startRound() {
   roundState = 'playing';
   broadcastRoundEvent('start');
   startObstacleTimer();
+  startGemTimer();
 }
 
 function endRound(winner) {
   roundState = 'ended';
-  if (winner) winner.score += ROUND_WIN_BONUS;
+  if (winner) {
+    winner.score += gameMode === 'survival' ? SURVIVAL_WIN_POINTS : ROUND_WIN_BONUS;
+  }
   broadcastRoundEvent('end', { winner: winner ? winner.nickname : null });
   clearInterval(obstacleTimer);
+  clearInterval(gemTimer);
   clearRoundTimer();
   roundTimer = setTimeout(() => {
     resetRoundIfPossible();
@@ -176,6 +202,7 @@ function endRound(winner) {
 function tick() {
   if (roundState !== 'playing') return;
 
+  const now = Date.now();
   const alivePlayers = [...players.values()].filter(p => p.alive);
 
   // Fase 1: aplica direção pendente e calcula nova cabeça
@@ -202,9 +229,13 @@ function tick() {
     }
 
     for (const other of alivePlayers) {
-      const bodyToCheck = other.id === p.id ? other.body.slice(0, -1) : other.body;
+      const isSelf = other.id === p.id;
+      const bodyToCheck = isSelf ? other.body.slice(0, -1) : other.body;
       if (bodyToCheck.some(seg => seg.x === head.x && seg.y === head.y)) {
-        deaths.add(p.id);
+        // a gema torna o jogador imune a colisões com OUTROS jogadores, não consigo mesmo
+        if (isSelf || now >= p.invincibleUntil) {
+          deaths.add(p.id);
+        }
       }
     }
   }
@@ -215,13 +246,13 @@ function tick() {
       const a = newHeads.get(alivePlayers[i].id);
       const b = newHeads.get(alivePlayers[j].id);
       if (a.x === b.x && a.y === b.y) {
-        deaths.add(alivePlayers[i].id);
-        deaths.add(alivePlayers[j].id);
+        if (now >= alivePlayers[i].invincibleUntil) deaths.add(alivePlayers[i].id);
+        if (now >= alivePlayers[j].invincibleUntil) deaths.add(alivePlayers[j].id);
       }
     }
   }
 
-  // Fase 3: aplica movimento para quem sobreviveu, come comida se for o caso
+  // Fase 3: aplica movimento para quem sobreviveu, come comida/gema se for o caso
   for (const p of alivePlayers) {
     if (deaths.has(p.id)) continue;
     const head = newHeads.get(p.id);
@@ -229,8 +260,12 @@ function tick() {
     p.body.unshift(head);
     if (ateIndex !== -1) {
       food.splice(ateIndex, 1);
-      p.score += 1;
+      if (gameMode !== 'survival') p.score += 1;
       p.growth += 1;
+    }
+    if (gem && gem.x === head.x && gem.y === head.y) {
+      gem = null;
+      p.invincibleUntil = now + INVINCIBLE_MS;
     }
     if (p.growth > 0) {
       p.growth -= 1;
@@ -262,12 +297,15 @@ function tick() {
 }
 
 function serializeState() {
+  const now = Date.now();
   return {
     grid: { cols: GRID_COLS, rows: GRID_ROWS },
     roundState,
     hostId,
+    gameMode,
     food,
     obstacles,
+    gem,
     players: [...players.values()].map(p => ({
       id: p.id,
       nickname: p.nickname,
@@ -275,7 +313,8 @@ function serializeState() {
       body: p.body,
       alive: p.alive,
       spectating: p.spectating,
-      score: p.score
+      score: p.score,
+      invincible: now < p.invincibleUntil
     }))
   };
 }
@@ -297,7 +336,8 @@ io.on('connection', socket => {
       alive: false,
       spectating: roundState === 'playing' || roundState === 'countdown',
       growth: 0,
-      score: 0
+      score: 0,
+      invincibleUntil: 0
     };
     players.set(socket.id, player);
 
@@ -318,6 +358,14 @@ io.on('connection', socket => {
     if (roundState !== 'waiting') return;
     if (connectedCount() < MIN_PLAYERS_TO_START) return;
     startCountdown();
+  });
+
+  socket.on('setMode', ({ mode }) => {
+    if (socket.id !== hostId) return;
+    if (roundState !== 'waiting') return;
+    if (mode !== 'classic' && mode !== 'survival') return;
+    gameMode = mode;
+    io.emit('state', serializeState());
   });
 
   socket.on('direction', dirName => {

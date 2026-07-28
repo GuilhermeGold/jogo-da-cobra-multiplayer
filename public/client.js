@@ -10,7 +10,11 @@ const canvas = document.getElementById('game-canvas');
 const ctx = canvas.getContext('2d');
 const scoreboard = document.getElementById('scoreboard');
 const roundMessage = document.getElementById('round-message');
+const modeIndicator = document.getElementById('mode-indicator');
+const hostControls = document.getElementById('host-controls');
 const startBtn = document.getElementById('start-btn');
+const modeClassicBtn = document.getElementById('mode-classic-btn');
+const modeSurvivalBtn = document.getElementById('mode-survival-btn');
 
 const socket = io({ transports: ['websocket'] });
 let myId = null;
@@ -21,18 +25,34 @@ let currentRoundState = 'waiting';
 let countdownValue = null;
 let hostId = null;
 let waitingNeeded = null;
+let gameMode = 'classic';
 
 startBtn.addEventListener('click', () => {
   socket.emit('startGame');
 });
 
-function updateStartButton() {
+modeClassicBtn.addEventListener('click', () => {
+  socket.emit('setMode', { mode: 'classic' });
+});
+
+modeSurvivalBtn.addEventListener('click', () => {
+  socket.emit('setMode', { mode: 'survival' });
+});
+
+function updateHostControls() {
   const isHost = myId != null && hostId === myId;
+
+  modeIndicator.textContent = gameMode === 'survival'
+    ? '🛡️ Sobrevivência — só vencer a rodada pontua'
+    : '🍏 Clássico — comer pontua';
+
   if (currentRoundState !== 'waiting' || !isHost) {
-    startBtn.classList.add('hidden');
+    hostControls.classList.add('hidden');
     return;
   }
-  startBtn.classList.remove('hidden');
+  hostControls.classList.remove('hidden');
+  modeClassicBtn.classList.toggle('active', gameMode === 'classic');
+  modeSurvivalBtn.classList.toggle('active', gameMode === 'survival');
   const ready = waitingNeeded === 0;
   startBtn.disabled = !ready;
   startBtn.textContent = ready ? 'Iniciar partida' : 'Aguardando jogadores...';
@@ -90,14 +110,15 @@ socket.on('roundEvent', event => {
         : 'Empate! Ninguém sobreviveu.';
       break;
   }
-  updateStartButton();
+  updateHostControls();
 });
 
 socket.on('state', state => {
   latestState = state;
   hostId = state.hostId;
+  gameMode = state.gameMode;
   renderScoreboard(state);
-  updateStartButton();
+  updateHostControls();
 });
 
 function lerpColor(a, b, t) {
@@ -200,6 +221,39 @@ function drawObstacle(o, t) {
   ctx.fill();
 }
 
+function drawGem(gem, t) {
+  const cx = gem.x * CELL_SIZE + CELL_SIZE / 2;
+  const cy = gem.y * CELL_SIZE + CELL_SIZE / 2;
+  const pulse = 0.5 + 0.5 * Math.sin(t * 5);
+
+  const glowRadius = CELL_SIZE * 0.9 + pulse * 4;
+  const gradient = ctx.createRadialGradient(cx, cy, 1, cx, cy, glowRadius);
+  gradient.addColorStop(0, `rgba(255,255,255,${0.5 + 0.3 * pulse})`);
+  gradient.addColorStop(0.4, `rgba(120,220,255,${0.5 + 0.2 * pulse})`);
+  gradient.addColorStop(1, 'rgba(120,220,255,0)');
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  ctx.arc(cx, cy, glowRadius, 0, Math.PI * 2);
+  ctx.fill();
+
+  const s = CELL_SIZE * 0.32;
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(Math.PI / 4 + Math.sin(t * 1.5) * 0.15);
+  ctx.fillStyle = '#8be9fd';
+  ctx.beginPath();
+  ctx.moveTo(0, -s);
+  ctx.lineTo(s, 0);
+  ctx.lineTo(0, s);
+  ctx.lineTo(-s, 0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  ctx.restore();
+}
+
 function drawEntities(state, t) {
   for (const o of state.obstacles) {
     drawObstacle(o, t);
@@ -217,8 +271,24 @@ function drawEntities(state, t) {
     ctx.fill();
   }
 
+  if (state.gem) drawGem(state.gem, t);
+
   for (const p of state.players) {
     if (!p.alive) continue;
+
+    if (p.invincible) {
+      const pulse = 0.5 + 0.5 * Math.sin(t * 8);
+      ctx.fillStyle = `rgba(255,215,60,${0.35 + 0.25 * pulse})`;
+      p.body.forEach(seg => {
+        ctx.fillRect(
+          seg.x * CELL_SIZE - 2,
+          seg.y * CELL_SIZE - 2,
+          CELL_SIZE + 4,
+          CELL_SIZE + 4
+        );
+      });
+    }
+
     ctx.fillStyle = p.color;
     p.body.forEach((seg, i) => {
       const pad = i === 0 ? 1 : 2;
@@ -233,14 +303,15 @@ function drawEntities(state, t) {
     const head = p.body[0];
     const tx = Math.min(canvas.width - 4, Math.max(4, head.x * CELL_SIZE + CELL_SIZE / 2));
     const ty = Math.max(12, head.y * CELL_SIZE - 6);
+    const label = p.invincible ? `🛡 ${p.nickname}` : p.nickname;
     ctx.font = 'bold 12px Segoe UI, Arial, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'alphabetic';
     ctx.lineWidth = 3;
     ctx.strokeStyle = 'rgba(0,0,0,0.85)';
-    ctx.strokeText(p.nickname, tx, ty);
+    ctx.strokeText(label, tx, ty);
     ctx.fillStyle = '#ffffff';
-    ctx.fillText(p.nickname, tx, ty);
+    ctx.fillText(label, tx, ty);
   }
 }
 

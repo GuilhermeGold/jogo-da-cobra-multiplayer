@@ -114,14 +114,55 @@ body {
 
 #round-info {
   display: flex;
-  align-items: center;
-  gap: 0.75rem;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.4rem;
+}
+
+#mode-indicator {
+  font-size: 0.78rem;
+  color: #9a9aa5;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 #round-message {
   font-size: 1.1rem;
   font-weight: bold;
   min-height: 1.5em;
+}
+
+#host-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.4rem;
+}
+
+#mode-selector {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.mode-btn {
+  padding: 0.35rem 0.7rem;
+  border-radius: 6px;
+  border: 1px solid #44475a;
+  background: #282a36;
+  color: #f8f8f2;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.mode-btn:hover {
+  border-color: #6272a4;
+}
+
+.mode-btn.active {
+  background: #8be9fd;
+  color: #1e1f29;
+  font-weight: bold;
+  border-color: #8be9fd;
 }
 
 #start-btn {

@@ -23,8 +23,15 @@
     <div id="hud">
       <div id="scoreboard"></div>
       <div id="round-info">
+        <div id="mode-indicator"></div>
         <div id="round-message"></div>
-        <button id="start-btn" class="hidden">Iniciar partida</button>
+        <div id="host-controls" class="hidden">
+          <div id="mode-selector">
+            <button id="mode-classic-btn" class="mode-btn" type="button">Clássico</button>
+            <button id="mode-survival-btn" class="mode-btn" type="button">Sobrevivência</button>
+          </div>
+          <button id="start-btn" type="button">Iniciar partida</button>
+        </div>
       </div>
     </div>
     <canvas id="game-canvas"></canvas>
