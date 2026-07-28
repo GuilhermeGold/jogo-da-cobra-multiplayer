@@ -1,16 +1,23 @@
 * {
   box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body {
+  overscroll-behavior: none;
 }
 
 body {
   margin: 0;
   min-height: 100vh;
+  min-height: 100dvh;
   background: #1e1f29;
   color: #f8f8f2;
   font-family: 'Segoe UI', Arial, sans-serif;
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 0.75rem;
 }
 
 .hidden {
@@ -74,6 +81,8 @@ body {
   flex-direction: column;
   align-items: center;
   gap: 0.75rem;
+  min-width: 0;
+  max-width: 100%;
 }
 
 #hud {
@@ -190,6 +199,9 @@ body {
   border-radius: 8px;
   max-width: 100%;
   height: auto;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 /* ---- Seletor de modo / desafios ---- */
@@ -321,6 +333,8 @@ body {
   flex-direction: column;
   align-items: center;
   gap: 0.75rem;
+  min-width: 0;
+  max-width: 100%;
 }
 
 #challenge-hud {
@@ -375,6 +389,9 @@ body {
   border-radius: 8px;
   max-width: 100%;
   height: auto;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .challenge-result-buttons {
@@ -404,4 +421,50 @@ body {
 
 .challenge-result-buttons .secondary-btn:hover {
   background: #565a72;
+}
+
+/* ---- Telas pequenas (celular) ---- */
+
+@media (max-width: 480px) {
+  body {
+    padding: 0.5rem;
+  }
+
+  .panel {
+    padding: 1.25rem 1.25rem;
+    width: 100%;
+  }
+
+  .mode-choice-buttons {
+    flex-direction: column;
+  }
+
+  .choice-btn {
+    width: 100%;
+  }
+
+  #hud,
+  #challenge-hud {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: center;
+    text-align: center;
+  }
+
+  #round-info,
+  #host-controls {
+    align-items: center;
+  }
+
+  #scoreboard {
+    justify-content: center;
+  }
+
+  .challenge-card {
+    flex-wrap: wrap;
+  }
+
+  .challenge-card-play {
+    width: 100%;
+  }
 }

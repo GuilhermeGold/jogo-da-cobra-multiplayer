@@ -395,3 +395,36 @@ window.addEventListener('keydown', e => {
   e.preventDefault();
   socket.emit('direction', dir);
 });
+
+function attachSwipeControls(element, onDirection) {
+  const SWIPE_THRESHOLD = 24;
+  let startX = 0;
+  let startY = 0;
+
+  element.addEventListener('touchstart', e => {
+    if (e.touches.length !== 1) return;
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+  }, { passive: true });
+
+  element.addEventListener('touchmove', e => {
+    if (e.touches.length === 1) e.preventDefault();
+  }, { passive: false });
+
+  element.addEventListener('touchend', e => {
+    const touch = e.changedTouches[0];
+    if (!touch) return;
+    const dx = touch.clientX - startX;
+    const dy = touch.clientY - startY;
+    if (Math.abs(dx) < SWIPE_THRESHOLD && Math.abs(dy) < SWIPE_THRESHOLD) return;
+    const dir = Math.abs(dx) > Math.abs(dy)
+      ? (dx > 0 ? 'right' : 'left')
+      : (dy > 0 ? 'down' : 'up');
+    onDirection(dir);
+  }, { passive: true });
+}
+
+attachSwipeControls(canvas, dir => {
+  if (activeMode !== 'multiplayer') return;
+  socket.emit('direction', dir);
+});

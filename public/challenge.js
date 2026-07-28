@@ -413,15 +413,22 @@
     window.showChallengeMenu();
   });
 
-  window.addEventListener('keydown', e => {
+  function trySetDirection(dirName) {
     if (activeMode !== 'challenge' || !running || !snake) return;
-    const dirName = KEY_TO_DIRECTION[e.key];
-    if (!dirName) return;
-    e.preventDefault();
     const nd = DIRS[dirName];
+    if (!nd) return;
     if (nd.x === -snake.dir.x && nd.y === -snake.dir.y) return;
     snake.pendingDir = nd;
+  }
+
+  window.addEventListener('keydown', e => {
+    const dirName = KEY_TO_DIRECTION[e.key];
+    if (!dirName || activeMode !== 'challenge') return;
+    e.preventDefault();
+    trySetDirection(dirName);
   });
+
+  attachSwipeControls(challengeCanvas, trySetDirection);
 
   function lerp(a, b, t) {
     return [0, 1, 2].map(i => Math.round(a[i] + (b[i] - a[i]) * t));
