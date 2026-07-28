@@ -1,9 +1,31 @@
 const CELL_SIZE = 20;
 
+let activeMode = 'none'; // none | multiplayer | challenge — usado para rotear o teclado
+
+const modeSelectScreen = document.getElementById('mode-select-screen');
+const chooseMultiplayerBtn = document.getElementById('choose-multiplayer-btn');
+const chooseChallengeBtn = document.getElementById('choose-challenge-btn');
+const backFromJoinBtn = document.getElementById('back-from-join-btn');
+
 const joinScreen = document.getElementById('join-screen');
 const joinForm = document.getElementById('join-form');
 const nicknameInput = document.getElementById('nickname-input');
 const joinError = document.getElementById('join-error');
+
+chooseMultiplayerBtn.addEventListener('click', () => {
+  modeSelectScreen.classList.add('hidden');
+  joinScreen.classList.remove('hidden');
+});
+
+backFromJoinBtn.addEventListener('click', () => {
+  joinScreen.classList.add('hidden');
+  modeSelectScreen.classList.remove('hidden');
+});
+
+chooseChallengeBtn.addEventListener('click', () => {
+  modeSelectScreen.classList.add('hidden');
+  window.showChallengeMenu();
+});
 
 const gameScreen = document.getElementById('game-screen');
 const canvas = document.getElementById('game-canvas');
@@ -77,6 +99,7 @@ socket.on('joined', ({ id, grid }) => {
   canvas.height = gridRows * CELL_SIZE;
   joinScreen.classList.add('hidden');
   gameScreen.classList.remove('hidden');
+  activeMode = 'multiplayer';
 });
 
 socket.on('roundEvent', event => {
@@ -366,6 +389,7 @@ const KEY_TO_DIRECTION = {
 };
 
 window.addEventListener('keydown', e => {
+  if (activeMode !== 'multiplayer') return;
   const dir = KEY_TO_DIRECTION[e.key];
   if (!dir) return;
   e.preventDefault();

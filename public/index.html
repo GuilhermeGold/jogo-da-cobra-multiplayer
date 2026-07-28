@@ -7,7 +7,26 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div id="join-screen" class="overlay">
+  <div id="mode-select-screen" class="overlay">
+    <div class="panel">
+      <h1>🐍 Snake Battle Royale</h1>
+      <p>Como você quer jogar?</p>
+      <div class="mode-choice-buttons">
+        <button id="choose-multiplayer-btn" type="button" class="choice-btn">
+          <span class="choice-icon">🏟️</span>
+          <span class="choice-title">Multiplayer</span>
+          <span class="choice-desc">Batalha real contra outros jogadores</span>
+        </button>
+        <button id="choose-challenge-btn" type="button" class="choice-btn">
+          <span class="choice-icon">🎯</span>
+          <span class="choice-title">Desafio</span>
+          <span class="choice-desc">Missões solo contra o relógio</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="join-screen" class="overlay hidden">
     <div class="panel">
       <h1>🐍 Snake Battle Royale</h1>
       <p>Digite seu apelido e entre na arena. Último vivo vence!</p>
@@ -16,6 +35,37 @@
         <button type="submit">Entrar</button>
       </form>
       <p id="join-error" class="error"></p>
+      <button id="back-from-join-btn" type="button" class="link-btn">&larr; Voltar</button>
+    </div>
+  </div>
+
+  <div id="challenge-menu-screen" class="overlay hidden">
+    <div class="panel challenge-menu-panel">
+      <h1>🎯 Escolha um desafio</h1>
+      <div id="challenge-list"></div>
+      <button id="back-from-challenge-menu-btn" type="button" class="link-btn">&larr; Voltar</button>
+    </div>
+  </div>
+
+  <div id="challenge-screen" class="hidden">
+    <div id="challenge-hud">
+      <div id="challenge-title"></div>
+      <div id="challenge-progress"></div>
+      <div id="challenge-timer"></div>
+      <button id="challenge-quit-btn" type="button" class="quit-btn">&times; Sair</button>
+    </div>
+    <div id="challenge-canvas-wrap">
+      <canvas id="challenge-canvas"></canvas>
+      <div id="challenge-result-overlay" class="overlay hidden">
+        <div class="panel">
+          <h2 id="challenge-result-title"></h2>
+          <p id="challenge-result-detail"></p>
+          <div class="challenge-result-buttons">
+            <button id="challenge-retry-btn" type="button">Tentar novamente</button>
+            <button id="challenge-menu-return-btn" type="button" class="secondary-btn">Escolher outro desafio</button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -39,5 +89,6 @@
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="client.js"></script>
+  <script src="challenge.js"></script>
 </body>
 </html>
