@@ -104,27 +104,65 @@ function lerpColor(a, b, t) {
   return [0, 1, 2].map(i => Math.round(a[i] + (b[i] - a[i]) * t));
 }
 
-const LAVA_DARK = [130, 20, 10];
-const LAVA_BRIGHT = [255, 180, 40];
+const STARS = Array.from({ length: 220 }, () => ({
+  x: Math.random(),
+  y: Math.random(),
+  r: 0.4 + Math.random() * 1.3,
+  phase: Math.random() * Math.PI * 2
+}));
 
-function drawLavaCell(gx, gy, seed, t) {
-  const intensity = 0.5 + 0.5 * Math.sin(t * 2.5 + seed * 0.6);
-  const [r, g, b] = lerpColor(LAVA_DARK, LAVA_BRIGHT, intensity);
-  ctx.fillStyle = `rgb(${r},${g},${b})`;
-  ctx.fillRect(gx * CELL_SIZE, gy * CELL_SIZE, CELL_SIZE, CELL_SIZE);
-  ctx.fillStyle = `rgba(255,120,0,${0.25 * intensity})`;
-  ctx.fillRect(gx * CELL_SIZE - 2, gy * CELL_SIZE - 2, CELL_SIZE + 4, CELL_SIZE + 4);
+function drawCosmicBackground(t) {
+  const w = canvas.width, h = canvas.height;
+
+  const base = ctx.createRadialGradient(w * 0.3, h * 0.32, 0, w * 0.3, h * 0.32, w * 0.9);
+  base.addColorStop(0, '#241a3d');
+  base.addColorStop(0.5, '#120e22');
+  base.addColorStop(1, '#08070f');
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, w, h);
+
+  const nebA = ctx.createRadialGradient(w * 0.72, h * 0.68, 0, w * 0.72, h * 0.68, w * 0.5);
+  nebA.addColorStop(0, 'rgba(74,217,201,0.14)');
+  nebA.addColorStop(1, 'rgba(74,217,201,0)');
+  ctx.fillStyle = nebA;
+  ctx.fillRect(0, 0, w, h);
+
+  const nebB = ctx.createRadialGradient(w * 0.22, h * 0.78, 0, w * 0.22, h * 0.78, w * 0.45);
+  nebB.addColorStop(0, 'rgba(176,131,255,0.12)');
+  nebB.addColorStop(1, 'rgba(176,131,255,0)');
+  ctx.fillStyle = nebB;
+  ctx.fillRect(0, 0, w, h);
+
+  STARS.forEach(s => {
+    const tw = 0.5 + 0.5 * Math.sin(t * 1.6 + s.phase);
+    ctx.fillStyle = `rgba(255,255,255,${0.25 + 0.6 * tw})`;
+    ctx.beginPath();
+    ctx.arc(s.x * w, s.y * h, s.r, 0, Math.PI * 2);
+    ctx.fill();
+  });
 }
 
-function drawLavaBorder(t) {
+const AURORA_DARK = [70, 40, 130];
+const AURORA_BRIGHT = [90, 230, 210];
+
+function drawAuroraCell(gx, gy, seed, t) {
+  const intensity = 0.5 + 0.5 * Math.sin(t * 1.8 + seed * 0.5);
+  const [r, g, b] = lerpColor(AURORA_DARK, AURORA_BRIGHT, intensity);
+  ctx.fillStyle = `rgba(${r},${g},${b},0.85)`;
+  ctx.fillRect(gx * CELL_SIZE, gy * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+  ctx.fillStyle = `rgba(150,120,255,${0.28 * intensity})`;
+  ctx.fillRect(gx * CELL_SIZE - 3, gy * CELL_SIZE - 3, CELL_SIZE + 6, CELL_SIZE + 6);
+}
+
+function drawAuroraBorder(t) {
   if (!gridCols || !gridRows) return;
   for (let x = 0; x < gridCols; x++) {
-    drawLavaCell(x, 0, x, t);
-    drawLavaCell(x, gridRows - 1, x + gridRows, t);
+    drawAuroraCell(x, 0, x, t);
+    drawAuroraCell(x, gridRows - 1, x + gridRows, t);
   }
   for (let y = 1; y < gridRows - 1; y++) {
-    drawLavaCell(0, y, y + gridCols, t);
-    drawLavaCell(gridCols - 1, y, y + gridCols + gridRows, t);
+    drawAuroraCell(0, y, y + gridCols, t);
+    drawAuroraCell(gridCols - 1, y, y + gridCols + gridRows, t);
   }
 }
 
@@ -222,8 +260,8 @@ function drawCountdownOverlay() {
 function frame(timestamp) {
   if (canvas.width && canvas.height) {
     const t = timestamp / 1000;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    drawLavaBorder(t);
+    drawCosmicBackground(t);
+    drawAuroraBorder(t);
     if (latestState) drawEntities(latestState, t);
     drawCountdownOverlay();
   }

@@ -24,7 +24,7 @@ const ROUND_END_DISPLAY_MS = 4000;
 const ROUND_WIN_BONUS = 5; // pontos extras para quem vence a rodada
 const OBSTACLE_INTERVAL_MS = 8000; // cria um novo obstáculo a cada x segundos
 const OBSTACLE_MAX = 30;
-const SPAWN_MARGIN = 10; // distância mínima da lava ao nascer, para dar tempo de reação
+const SPAWN_MARGIN = 10; // distância mínima da borda ao nascer, para dar tempo de reação
 
 const COLORS = [
   '#ff5555', '#50fa7b', '#8be9fd', '#ffb86c',

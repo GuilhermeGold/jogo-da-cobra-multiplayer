@@ -144,8 +144,8 @@ body {
 }
 
 #game-canvas {
-  background: #12131a;
-  border: 2px solid #44475a;
+  background: #08070f;
+  border: 2px solid #3a2f5c;
   border-radius: 8px;
   max-width: 100%;
   height: auto;
