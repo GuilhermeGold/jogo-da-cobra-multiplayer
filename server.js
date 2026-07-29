@@ -14,9 +14,9 @@ app.get('/health', (_req, res) => res.status(200).send('ok'));
 // ---- Configuração do jogo ----
 const GRID_COLS = 60;
 const GRID_ROWS = 40;
-const TICK_RATE_MS = 70; // intervalo entre passos da cobra em velocidade padrão
-const SPEED_RAMP_START_MS = 200; // intervalo do primeiro tick da rodada (início mais devagar)
-const SPEED_RAMP_DURATION_MS = 2300; // tempo até a velocidade chegar ao padrão
+const TICK_RATE_MS = 55; // intervalo entre passos da cobra em velocidade padrão (resposta às setas o mais rápida possível)
+const SPEED_RAMP_START_MS = 85; // intervalo do primeiro tick da rodada (início levemente mais devagar)
+const SPEED_RAMP_DURATION_MS = 700; // tempo até a velocidade chegar ao padrão — bem curto, só um "vai!" inicial
 const WIN_SCORE_CLASSIC = 100; // pontuação para vencer a partida no modo Clássico
 const WIN_SCORE_SURVIVAL = 10; // pontuação para vencer a partida no modo Sobrevivência
 const MAX_PLAYERS = 8;

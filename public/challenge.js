@@ -21,11 +21,11 @@
   const CELL = 20;
   const COLS = 34;
   const ROWS = 24;
-  const TICK_MS = 70; // intervalo entre passos da cobra em velocidade padrão
+  const TICK_MS = 55; // intervalo entre passos da cobra em velocidade padrão (resposta às setas o mais rápida possível)
   const OBSTACLE_CAP = 20;
   const PRECOUNTDOWN_SECONDS = 3;
-  const SPEED_RAMP_START_MS = 170; // intervalo do primeiro tick da corrida (início mais devagar)
-  const SPEED_RAMP_DURATION_MS = 1900; // tempo até a velocidade chegar ao padrão
+  const SPEED_RAMP_START_MS = 85; // intervalo do primeiro tick da corrida (início levemente mais devagar)
+  const SPEED_RAMP_DURATION_MS = 700; // tempo até a velocidade chegar ao padrão — bem curto, só um "vai!" inicial
   const HUNTER_SKIP_EVERY = 5; // a caçadora fica parada 1 a cada 5 ticks, ficando um pouco mais lenta
 
   let CELL_W = CELL;
