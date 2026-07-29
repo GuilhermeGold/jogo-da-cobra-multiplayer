@@ -21,11 +21,11 @@
   const CELL = 20;
   const COLS = 34;
   const ROWS = 24;
-  const TICK_MS = 75; // intervalo entre passos da cobra em velocidade padrão (menor = giro mais responsivo)
+  const TICK_MS = 90; // intervalo entre passos da cobra em velocidade padrão
   const OBSTACLE_CAP = 20;
   const PRECOUNTDOWN_SECONDS = 3;
-  const SPEED_RAMP_START_MS = 170; // intervalo do primeiro tick da corrida (início mais devagar)
-  const SPEED_RAMP_DURATION_MS = 1800; // tempo até a velocidade chegar ao padrão
+  const SPEED_RAMP_START_MS = 220; // intervalo do primeiro tick da corrida (início mais devagar)
+  const SPEED_RAMP_DURATION_MS = 2500; // tempo até a velocidade chegar ao padrão
   const HUNTER_SKIP_EVERY = 5; // a caçadora fica parada 1 a cada 5 ticks, ficando um pouco mais lenta
 
   let CELL_W = CELL;
@@ -654,6 +654,22 @@
     });
   }
 
+  function drawEyes(head, dir) {
+    const cx = head.x * CELL_W + CELL_W / 2;
+    const cy = head.y * CELL_H + CELL_H / 2;
+    const perpX = -dir.y;
+    const perpY = dir.x;
+    const eyeR = Math.min(CELL_W, CELL_H) * 0.12;
+    cctx.fillStyle = '#0b0b12';
+    for (const side of [-1, 1]) {
+      const ex = cx + dir.x * CELL_W * 0.16 + perpX * CELL_W * 0.22 * side;
+      const ey = cy + dir.y * CELL_H * 0.16 + perpY * CELL_H * 0.22 * side;
+      cctx.beginPath();
+      cctx.arc(ex, ey, eyeR, 0, Math.PI * 2);
+      cctx.fill();
+    }
+  }
+
   function drawHunter(t) {
     if (!hunter) return;
     const pulse = 0.5 + 0.5 * Math.sin(t * 6);
@@ -662,6 +678,7 @@
       cctx.fillRect(seg.x * CELL_W - 2, seg.y * CELL_H - 2, CELL_W + 4, CELL_H + 4);
     });
     drawSnakeBody(hunter.body, '#d62828');
+    drawEyes(hunter.body[0], hunter.dir);
   }
 
   function drawPrecountdownOverlay() {
@@ -685,7 +702,10 @@
     drawFood();
     drawCheckpoint(t);
     drawHunter(t);
-    if (snake) drawSnakeBody(snake.body, '#50fa7b');
+    if (snake) {
+      drawSnakeBody(snake.body, '#50fa7b');
+      drawEyes(snake.body[0], snake.pendingDir);
+    }
     drawPrecountdownOverlay();
   }
 

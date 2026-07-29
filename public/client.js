@@ -56,6 +56,7 @@ let countdownValue = null;
 let hostId = null;
 let waitingNeeded = null;
 let gameMode = 'classic';
+let winScore = 100;
 
 startBtn.addEventListener('click', () => {
   socket.emit('startGame');
@@ -72,17 +73,25 @@ modeSurvivalBtn.addEventListener('click', () => {
 function updateHostControls() {
   const isHost = myId != null && hostId === myId;
 
-  modeIndicator.textContent = gameMode === 'survival'
+  modeIndicator.textContent = (gameMode === 'survival'
     ? '🛡️ Sobrevivência — só vencer a rodada pontua'
-    : '🍏 Clássico — comer pontua';
+    : '🍏 Clássico — comer pontua') + ` · 🏆 Primeiro a ${winScore} pts vence a partida!`;
 
-  if (currentRoundState !== 'waiting' || !isHost) {
+  const showControls = isHost && (currentRoundState === 'waiting' || currentRoundState === 'matchEnd');
+  if (!showControls) {
     hostControls.classList.add('hidden');
     return;
   }
   hostControls.classList.remove('hidden');
   modeClassicBtn.classList.toggle('active', gameMode === 'classic');
   modeSurvivalBtn.classList.toggle('active', gameMode === 'survival');
+
+  if (currentRoundState === 'matchEnd') {
+    startBtn.disabled = false;
+    startBtn.textContent = 'Nova partida';
+    return;
+  }
+
   const ready = waitingNeeded === 0;
   startBtn.disabled = !ready;
   startBtn.textContent = ready ? 'Iniciar partida' : 'Aguardando jogadores...';
@@ -162,10 +171,12 @@ socket.on('roundEvent', event => {
     }
     case 'countdown':
       countdownValue = event.seconds;
+      localPendingDir = null;
       roundMessage.textContent = `Começando em ${event.seconds}...`;
       break;
     case 'start':
       countdownValue = null;
+      localPendingDir = null;
       roundMessage.textContent = 'Vale tudo!';
       break;
     case 'end':
@@ -173,6 +184,10 @@ socket.on('roundEvent', event => {
       roundMessage.textContent = event.winner
         ? `🏆 ${event.winner} venceu a rodada!`
         : 'Empate! Ninguém sobreviveu.';
+      break;
+    case 'matchEnd':
+      countdownValue = null;
+      roundMessage.textContent = `🏆🎉 ${event.winner} venceu a PARTIDA com ${event.score} pontos!`;
       break;
   }
   updateHostControls();
@@ -185,6 +200,7 @@ socket.on('state', state => {
   latestState = state;
   hostId = state.hostId;
   gameMode = state.gameMode;
+  winScore = state.winScore || winScore;
   renderScoreboard(state);
   updateHostControls();
   if (state.players.length !== lastScoreboardCount) {
@@ -305,24 +321,27 @@ function drawGem(gem, t) {
   const glowRadius = cs * 0.9 + pulse * 4;
   const gradient = ctx.createRadialGradient(cx, cy, 1, cx, cy, glowRadius);
   gradient.addColorStop(0, `rgba(255,255,255,${0.5 + 0.3 * pulse})`);
-  gradient.addColorStop(0.4, `rgba(120,220,255,${0.5 + 0.2 * pulse})`);
-  gradient.addColorStop(1, 'rgba(120,220,255,0)');
+  gradient.addColorStop(0.4, `rgba(255,225,90,${0.5 + 0.2 * pulse})`);
+  gradient.addColorStop(1, 'rgba(255,225,90,0)');
   ctx.fillStyle = gradient;
   ctx.beginPath();
   ctx.arc(cx, cy, glowRadius, 0, Math.PI * 2);
   ctx.fill();
 
-  const s = cs * 0.32;
+  const outerR = cs * 0.42;
+  const innerR = outerR * 0.42;
   ctx.save();
   ctx.translate(cx, cy);
-  ctx.rotate(Math.PI / 4 + Math.sin(t * 1.5) * 0.15);
-  ctx.fillStyle = '#8be9fd';
+  ctx.rotate(Math.sin(t * 1.2) * 0.2);
   ctx.beginPath();
-  ctx.moveTo(0, -s);
-  ctx.lineTo(s, 0);
-  ctx.lineTo(0, s);
-  ctx.lineTo(-s, 0);
+  for (let i = 0; i < 5; i++) {
+    const outerAngle = -Math.PI / 2 + (i * 2 * Math.PI) / 5;
+    const innerAngle = outerAngle + Math.PI / 5;
+    ctx.lineTo(Math.cos(outerAngle) * outerR, Math.sin(outerAngle) * outerR);
+    ctx.lineTo(Math.cos(innerAngle) * innerR, Math.sin(innerAngle) * innerR);
+  }
   ctx.closePath();
+  ctx.fillStyle = '#ffe14d';
   ctx.fill();
   ctx.strokeStyle = '#ffffff';
   ctx.lineWidth = 1.5;
@@ -377,6 +396,8 @@ function drawEntities(state, t) {
       );
     });
 
+    drawEyes(p.body[0], getFacingDir(p));
+
     const head = p.body[0];
     const tx = Math.min(canvas.width - 4, Math.max(4, head.x * CELL_W + CELL_W / 2));
     const ty = Math.max(12, head.y * CELL_H - 6);
@@ -429,7 +450,7 @@ function renderScoreboard(state) {
     entry.appendChild(dot);
     const label = document.createElement('span');
     const you = p.id === myId ? ' (você)' : '';
-    label.textContent = `${p.nickname}${you}: ${p.score}`;
+    label.textContent = `${p.nickname}${you}: ${p.score}/${winScore}`;
     entry.appendChild(label);
     scoreboard.appendChild(entry);
   }
@@ -442,12 +463,60 @@ const KEY_TO_DIRECTION = {
   ArrowRight: 'right', d: 'right', D: 'right'
 };
 
+const DIRECTION_VECTORS = {
+  up: { x: 0, y: -1 },
+  down: { x: 0, y: 1 },
+  left: { x: -1, y: 0 },
+  right: { x: 1, y: 0 }
+};
+
+// direção que o jogador acabou de pedir, aplicada instantaneamente nos "olhos"
+// da própria cobra antes mesmo do servidor confirmar o movimento
+let localPendingDir = null;
+
+function getActualDir(player) {
+  if (!player || player.body.length < 2) return null;
+  const [head, neck] = player.body;
+  return { x: Math.sign(head.x - neck.x), y: Math.sign(head.y - neck.y) };
+}
+
+function sendDirection(dirName) {
+  const vec = DIRECTION_VECTORS[dirName];
+  if (!vec) return;
+  const myPlayer = latestState && latestState.players.find(p => p.id === myId);
+  const actual = myPlayer ? getActualDir(myPlayer) : null;
+  if (actual && vec.x === -actual.x && vec.y === -actual.y) return; // impede reverter, igual ao servidor
+  localPendingDir = vec;
+  socket.emit('direction', dirName);
+}
+
+function getFacingDir(player) {
+  if (player.id === myId && localPendingDir) return localPendingDir;
+  return getActualDir(player) || { x: 1, y: 0 };
+}
+
+function drawEyes(head, dir) {
+  const cx = head.x * CELL_W + CELL_W / 2;
+  const cy = head.y * CELL_H + CELL_H / 2;
+  const perpX = -dir.y;
+  const perpY = dir.x;
+  const eyeR = Math.min(CELL_W, CELL_H) * 0.12;
+  ctx.fillStyle = '#0b0b12';
+  for (const side of [-1, 1]) {
+    const ex = cx + dir.x * CELL_W * 0.16 + perpX * CELL_W * 0.22 * side;
+    const ey = cy + dir.y * CELL_H * 0.16 + perpY * CELL_H * 0.22 * side;
+    ctx.beginPath();
+    ctx.arc(ex, ey, eyeR, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
 window.addEventListener('keydown', e => {
   if (activeMode !== 'multiplayer') return;
   const dir = KEY_TO_DIRECTION[e.key];
   if (!dir) return;
   e.preventDefault();
-  socket.emit('direction', dir);
+  sendDirection(dir);
 });
 
 function attachSwipeControls(element, onDirection) {
@@ -480,5 +549,5 @@ function attachSwipeControls(element, onDirection) {
 
 attachSwipeControls(canvas, dir => {
   if (activeMode !== 'multiplayer') return;
-  socket.emit('direction', dir);
+  sendDirection(dir);
 });

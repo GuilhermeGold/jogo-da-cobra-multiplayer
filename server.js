@@ -14,9 +14,10 @@ app.get('/health', (_req, res) => res.status(200).send('ok'));
 // ---- Configuração do jogo ----
 const GRID_COLS = 60;
 const GRID_ROWS = 40;
-const TICK_RATE_MS = 75; // intervalo entre passos da cobra em velocidade padrão (menor = giro mais responsivo)
-const SPEED_RAMP_START_MS = 180; // intervalo do primeiro tick da rodada (início mais devagar)
-const SPEED_RAMP_DURATION_MS = 2200; // tempo até a velocidade chegar ao padrão
+const TICK_RATE_MS = 90; // intervalo entre passos da cobra em velocidade padrão
+const SPEED_RAMP_START_MS = 260; // intervalo do primeiro tick da rodada (início mais devagar)
+const SPEED_RAMP_DURATION_MS = 3000; // tempo até a velocidade chegar ao padrão
+const WIN_SCORE = 100; // quem atingir essa pontuação vence a partida
 const MAX_PLAYERS = 8;
 const MIN_PLAYERS_TO_START = 2;
 const FOOD_COUNT = 25;
@@ -28,8 +29,8 @@ const OBSTACLE_INTERVAL_MS = 8000; // cria um novo obstáculo a cada x segundos
 const OBSTACLE_MAX = 30;
 const SPAWN_MARGIN = 10; // distância mínima da borda ao nascer, para dar tempo de reação
 const SURVIVAL_WIN_POINTS = 1; // pontos por vencer a rodada no modo Sobrevivência
-const GEM_INTERVAL_MS = 15000; // intervalo de spawn da gema especial (modo Sobrevivência)
-const INVINCIBLE_MS = 5000; // duração da invencibilidade concedida pela gema
+const GEM_INTERVAL_MS = 15000; // intervalo de spawn da estrela de invencibilidade (todos os modos)
+const INVINCIBLE_MS = 5000; // duração da invencibilidade concedida pela estrela
 
 const COLORS = [
   '#ff5555', '#50fa7b', '#8be9fd', '#ffb86c',
@@ -47,9 +48,10 @@ const DIRECTIONS = {
 const players = new Map();
 let food = []; // [{x,y}]
 let obstacles = []; // [{x,y}]
-let gem = null; // {x,y} | null — só existe no modo Sobrevivência
+let gem = null; // {x,y} | null — estrela de invencibilidade, disponível em qualquer modo
 let gameMode = 'classic'; // classic | survival
-let roundState = 'waiting'; // waiting | countdown | playing | ended
+let roundState = 'waiting'; // waiting | countdown | playing | ended | matchOver
+let matchWinner = null; // Player | null — definido quando alguém atinge WIN_SCORE
 let hostId = null;
 let roundTimer = null;
 let obstacleTimer = null;
@@ -101,7 +103,6 @@ function spawnGem() {
 
 function startGemTimer() {
   clearInterval(gemTimer);
-  if (gameMode !== 'survival') return;
   gemTimer = setInterval(() => {
     if (roundState === 'playing') spawnGem();
   }, GEM_INTERVAL_MS);
@@ -137,6 +138,28 @@ function aliveCount() {
 
 function broadcastRoundEvent(type, payload = {}) {
   io.emit('roundEvent', { type, ...payload });
+}
+
+function resetAllScores() {
+  for (const p of players.values()) p.score = 0;
+  matchWinner = null;
+}
+
+function findMatchWinner() {
+  for (const p of players.values()) {
+    if (p.score >= WIN_SCORE) return p;
+  }
+  return null;
+}
+
+function endMatch(winner) {
+  roundState = 'matchOver';
+  matchWinner = winner;
+  clearInterval(obstacleTimer);
+  clearInterval(gemTimer);
+  clearRoundTimer();
+  broadcastRoundEvent('matchEnd', { winner: winner.nickname, score: winner.score });
+  io.emit('state', serializeState());
 }
 
 function resetRoundIfPossible() {
@@ -191,10 +214,15 @@ function startRound() {
 }
 
 function endRound(winner) {
-  roundState = 'ended';
   if (winner) {
     winner.score += gameMode === 'survival' ? SURVIVAL_WIN_POINTS : ROUND_WIN_BONUS;
+    const matchWinnerPlayer = findMatchWinner();
+    if (matchWinnerPlayer) {
+      endMatch(matchWinnerPlayer);
+      return;
+    }
   }
+  roundState = 'ended';
   broadcastRoundEvent('end', { winner: winner ? winner.nickname : null });
   clearInterval(obstacleTimer);
   clearInterval(gemTimer);
@@ -293,7 +321,14 @@ function tick() {
 
   spawnFood();
 
-  // Fase 5: checa fim de rodada
+  // Fase 5: checa se alguém venceu a partida atingindo WIN_SCORE
+  const matchWinnerPlayer = findMatchWinner();
+  if (matchWinnerPlayer) {
+    endMatch(matchWinnerPlayer);
+    return;
+  }
+
+  // Fase 6: checa fim de rodada
   const stillAlive = [...players.values()].filter(p => p.alive);
   if (stillAlive.length <= 1 && alivePlayers.length >= 1 && [...players.values()].length >= MIN_PLAYERS_TO_START) {
     endRound(stillAlive[0] || null);
@@ -309,6 +344,7 @@ function serializeState() {
     roundState,
     hostId,
     gameMode,
+    winScore: WIN_SCORE,
     food,
     obstacles,
     gem,
@@ -361,6 +397,17 @@ io.on('connection', socket => {
 
   socket.on('startGame', () => {
     if (socket.id !== hostId) return;
+    if (roundState === 'matchOver') {
+      resetAllScores();
+      if (connectedCount() < MIN_PLAYERS_TO_START) {
+        roundState = 'waiting';
+        broadcastRoundEvent('waiting', { needed: Math.max(0, MIN_PLAYERS_TO_START - connectedCount()) });
+        io.emit('state', serializeState());
+        return;
+      }
+      startCountdown();
+      return;
+    }
     if (roundState !== 'waiting') return;
     if (connectedCount() < MIN_PLAYERS_TO_START) return;
     startCountdown();
@@ -368,7 +415,7 @@ io.on('connection', socket => {
 
   socket.on('setMode', ({ mode }) => {
     if (socket.id !== hostId) return;
-    if (roundState !== 'waiting') return;
+    if (roundState !== 'waiting' && roundState !== 'matchOver') return;
     if (mode !== 'classic' && mode !== 'survival') return;
     gameMode = mode;
     io.emit('state', serializeState());
@@ -399,6 +446,7 @@ io.on('connection', socket => {
     } else {
       if (connectedCount() < MIN_PLAYERS_TO_START) {
         clearRoundTimer();
+        if (roundState === 'matchOver') resetAllScores();
         roundState = 'waiting';
       }
       if (roundState === 'waiting') {
