@@ -14,9 +14,9 @@ app.get('/health', (_req, res) => res.status(200).send('ok'));
 // ---- Configuração do jogo ----
 const GRID_COLS = 60;
 const GRID_ROWS = 40;
-const TICK_RATE_MS = 90;
-const SPEED_RAMP_START_MS = 260; // intervalo do primeiro tick da rodada (início mais devagar)
-const SPEED_RAMP_DURATION_MS = 3000; // tempo até a velocidade chegar ao padrão
+const TICK_RATE_MS = 75; // intervalo entre passos da cobra em velocidade padrão (menor = giro mais responsivo)
+const SPEED_RAMP_START_MS = 180; // intervalo do primeiro tick da rodada (início mais devagar)
+const SPEED_RAMP_DURATION_MS = 2200; // tempo até a velocidade chegar ao padrão
 const MAX_PLAYERS = 8;
 const MIN_PLAYERS_TO_START = 2;
 const FOOD_COUNT = 25;
