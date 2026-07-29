@@ -523,10 +523,17 @@
 
   window.addEventListener('keydown', e => {
     if (activeMode !== 'challenge') return;
-    if (e.key === 'Enter' && !resultOverlay.classList.contains('hidden')) {
-      e.preventDefault();
-      retryBtn.click();
-      return;
+    if (!resultOverlay.classList.contains('hidden')) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        retryBtn.click();
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        menuReturnBtn.click();
+        return;
+      }
     }
     const dirName = KEY_TO_DIRECTION[e.key];
     if (!dirName) return;
