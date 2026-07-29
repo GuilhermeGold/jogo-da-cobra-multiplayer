@@ -14,10 +14,11 @@ app.get('/health', (_req, res) => res.status(200).send('ok'));
 // ---- Configuração do jogo ----
 const GRID_COLS = 60;
 const GRID_ROWS = 40;
-const TICK_RATE_MS = 90; // intervalo entre passos da cobra em velocidade padrão
-const SPEED_RAMP_START_MS = 260; // intervalo do primeiro tick da rodada (início mais devagar)
-const SPEED_RAMP_DURATION_MS = 3000; // tempo até a velocidade chegar ao padrão
-const WIN_SCORE = 100; // quem atingir essa pontuação vence a partida
+const TICK_RATE_MS = 70; // intervalo entre passos da cobra em velocidade padrão
+const SPEED_RAMP_START_MS = 200; // intervalo do primeiro tick da rodada (início mais devagar)
+const SPEED_RAMP_DURATION_MS = 2300; // tempo até a velocidade chegar ao padrão
+const WIN_SCORE_CLASSIC = 100; // pontuação para vencer a partida no modo Clássico
+const WIN_SCORE_SURVIVAL = 10; // pontuação para vencer a partida no modo Sobrevivência
 const MAX_PLAYERS = 8;
 const MIN_PLAYERS_TO_START = 2;
 const FOOD_COUNT = 25;
@@ -145,9 +146,14 @@ function resetAllScores() {
   matchWinner = null;
 }
 
+function currentWinScore() {
+  return gameMode === 'survival' ? WIN_SCORE_SURVIVAL : WIN_SCORE_CLASSIC;
+}
+
 function findMatchWinner() {
+  const target = currentWinScore();
   for (const p of players.values()) {
-    if (p.score >= WIN_SCORE) return p;
+    if (p.score >= target) return p;
   }
   return null;
 }
@@ -344,7 +350,7 @@ function serializeState() {
     roundState,
     hostId,
     gameMode,
-    winScore: WIN_SCORE,
+    winScore: currentWinScore(),
     food,
     obstacles,
     gem,

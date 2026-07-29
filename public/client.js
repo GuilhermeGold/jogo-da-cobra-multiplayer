@@ -321,8 +321,8 @@ function drawGem(gem, t) {
   const glowRadius = cs * 0.9 + pulse * 4;
   const gradient = ctx.createRadialGradient(cx, cy, 1, cx, cy, glowRadius);
   gradient.addColorStop(0, `rgba(255,255,255,${0.5 + 0.3 * pulse})`);
-  gradient.addColorStop(0.4, `rgba(255,225,90,${0.5 + 0.2 * pulse})`);
-  gradient.addColorStop(1, 'rgba(255,225,90,0)');
+  gradient.addColorStop(0.4, `rgba(0,225,255,${0.55 + 0.2 * pulse})`);
+  gradient.addColorStop(1, 'rgba(0,225,255,0)');
   ctx.fillStyle = gradient;
   ctx.beginPath();
   ctx.arc(cx, cy, glowRadius, 0, Math.PI * 2);
@@ -341,7 +341,7 @@ function drawGem(gem, t) {
     ctx.lineTo(Math.cos(innerAngle) * innerR, Math.sin(innerAngle) * innerR);
   }
   ctx.closePath();
-  ctx.fillStyle = '#ffe14d';
+  ctx.fillStyle = '#00e0ff';
   ctx.fill();
   ctx.strokeStyle = '#ffffff';
   ctx.lineWidth = 1.5;
