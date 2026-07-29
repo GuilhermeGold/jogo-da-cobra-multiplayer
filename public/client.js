@@ -1,4 +1,11 @@
-const CELL_SIZE = 20;
+const CELL_SIZE = 20; // tamanho de célula padrão no desktop (células quadradas)
+const MOBILE_BREAKPOINT = 480;
+let CELL_W = CELL_SIZE;
+let CELL_H = CELL_SIZE;
+
+function isMobileLayout() {
+  return window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT}px)`).matches;
+}
 
 let activeMode = 'none'; // none | multiplayer | challenge — usado para rotear o teclado
 
@@ -28,6 +35,7 @@ chooseChallengeBtn.addEventListener('click', () => {
 });
 
 const gameScreen = document.getElementById('game-screen');
+const hud = document.getElementById('hud');
 const canvas = document.getElementById('game-canvas');
 const ctx = canvas.getContext('2d');
 const scoreboard = document.getElementById('scoreboard');
@@ -91,15 +99,49 @@ socket.on('joinRejected', ({ reason }) => {
   joinError.textContent = reason;
 });
 
+function computeCanvasSize() {
+  if (!gridCols || !gridRows) return;
+  const mobile = isMobileLayout();
+  let targetW, targetH;
+  if (mobile) {
+    // no celular a arena estica para preencher quase toda a tela; as células deixam de ser quadradas
+    const viewportW = gameScreen.getBoundingClientRect().width || window.innerWidth;
+    const viewportH = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+    const hudHeight = hud.getBoundingClientRect().height;
+    const verticalReserve = 32; // gap entre HUD/canvas + margem de segurança
+    targetW = Math.round(Math.max(120, viewportW));
+    targetH = Math.round(Math.max(120, viewportH - hudHeight - verticalReserve));
+  } else {
+    targetW = gridCols * CELL_SIZE;
+    targetH = gridRows * CELL_SIZE;
+  }
+
+  CELL_W = targetW / gridCols;
+  CELL_H = targetH / gridRows;
+  if (canvas.width === targetW && canvas.height === targetH) return;
+
+  canvas.width = targetW;
+  canvas.height = targetH;
+  if (mobile) {
+    canvas.style.width = `${targetW}px`;
+    canvas.style.height = `${targetH}px`;
+  } else {
+    canvas.style.width = '';
+    canvas.style.height = '';
+  }
+}
+
+window.addEventListener('resize', computeCanvasSize);
+window.addEventListener('orientationchange', () => setTimeout(computeCanvasSize, 300));
+
 socket.on('joined', ({ id, grid }) => {
   myId = id;
   gridCols = grid.cols;
   gridRows = grid.rows;
-  canvas.width = gridCols * CELL_SIZE;
-  canvas.height = gridRows * CELL_SIZE;
   joinScreen.classList.add('hidden');
   gameScreen.classList.remove('hidden');
   activeMode = 'multiplayer';
+  computeCanvasSize();
 });
 
 socket.on('roundEvent', event => {
@@ -134,7 +176,10 @@ socket.on('roundEvent', event => {
       break;
   }
   updateHostControls();
+  computeCanvasSize();
 });
+
+let lastScoreboardCount = -1;
 
 socket.on('state', state => {
   latestState = state;
@@ -142,6 +187,10 @@ socket.on('state', state => {
   gameMode = state.gameMode;
   renderScoreboard(state);
   updateHostControls();
+  if (state.players.length !== lastScoreboardCount) {
+    lastScoreboardCount = state.players.length;
+    computeCanvasSize();
+  }
 });
 
 function lerpColor(a, b, t) {
@@ -192,10 +241,12 @@ const AURORA_BRIGHT = [90, 230, 210];
 function drawAuroraCell(gx, gy, seed, t) {
   const intensity = 0.5 + 0.5 * Math.sin(t * 1.8 + seed * 0.5);
   const [r, g, b] = lerpColor(AURORA_DARK, AURORA_BRIGHT, intensity);
+  const padX = CELL_W * 0.15;
+  const padY = CELL_H * 0.15;
   ctx.fillStyle = `rgba(${r},${g},${b},0.85)`;
-  ctx.fillRect(gx * CELL_SIZE, gy * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+  ctx.fillRect(gx * CELL_W, gy * CELL_H, CELL_W, CELL_H);
   ctx.fillStyle = `rgba(150,120,255,${0.28 * intensity})`;
-  ctx.fillRect(gx * CELL_SIZE - 3, gy * CELL_SIZE - 3, CELL_SIZE + 6, CELL_SIZE + 6);
+  ctx.fillRect(gx * CELL_W - padX, gy * CELL_H - padY, CELL_W + padX * 2, CELL_H + padY * 2);
 }
 
 function drawAuroraBorder(t) {
@@ -211,11 +262,12 @@ function drawAuroraBorder(t) {
 }
 
 function drawObstacle(o, t) {
-  const cx = o.x * CELL_SIZE + CELL_SIZE / 2;
-  const cy = o.y * CELL_SIZE + CELL_SIZE / 2;
+  const cs = Math.min(CELL_W, CELL_H);
+  const cx = o.x * CELL_W + CELL_W / 2;
+  const cy = o.y * CELL_H + CELL_H / 2;
   const pulse = 0.5 + 0.5 * Math.sin(t * 4 + o.x * 0.7 + o.y * 0.7);
 
-  const glowRadius = CELL_SIZE * 0.9 + pulse * 5;
+  const glowRadius = cs * 0.9 + pulse * 5;
   const gradient = ctx.createRadialGradient(cx, cy, 1, cx, cy, glowRadius);
   gradient.addColorStop(0, `rgba(255,45,170,${0.55 + 0.3 * pulse})`);
   gradient.addColorStop(1, 'rgba(255,45,170,0)');
@@ -226,11 +278,11 @@ function drawObstacle(o, t) {
 
   ctx.fillStyle = '#2b2b2b';
   ctx.beginPath();
-  ctx.moveTo(cx, cy - CELL_SIZE * 0.45);
-  ctx.lineTo(cx + CELL_SIZE * 0.42, cy - CELL_SIZE * 0.08);
-  ctx.lineTo(cx + CELL_SIZE * 0.28, cy + CELL_SIZE * 0.45);
-  ctx.lineTo(cx - CELL_SIZE * 0.28, cy + CELL_SIZE * 0.45);
-  ctx.lineTo(cx - CELL_SIZE * 0.42, cy - CELL_SIZE * 0.08);
+  ctx.moveTo(cx, cy - cs * 0.45);
+  ctx.lineTo(cx + cs * 0.42, cy - cs * 0.08);
+  ctx.lineTo(cx + cs * 0.28, cy + cs * 0.45);
+  ctx.lineTo(cx - cs * 0.28, cy + cs * 0.45);
+  ctx.lineTo(cx - cs * 0.42, cy - cs * 0.08);
   ctx.closePath();
   ctx.fill();
   ctx.lineWidth = 2;
@@ -238,18 +290,19 @@ function drawObstacle(o, t) {
   ctx.stroke();
 
   ctx.fillStyle = '#ffe14d';
-  ctx.fillRect(cx - 1.5, cy - CELL_SIZE * 0.22, 3, CELL_SIZE * 0.28);
+  ctx.fillRect(cx - 1.5, cy - cs * 0.22, 3, cs * 0.28);
   ctx.beginPath();
-  ctx.arc(cx, cy + CELL_SIZE * 0.16, 2, 0, Math.PI * 2);
+  ctx.arc(cx, cy + cs * 0.16, 2, 0, Math.PI * 2);
   ctx.fill();
 }
 
 function drawGem(gem, t) {
-  const cx = gem.x * CELL_SIZE + CELL_SIZE / 2;
-  const cy = gem.y * CELL_SIZE + CELL_SIZE / 2;
+  const cs = Math.min(CELL_W, CELL_H);
+  const cx = gem.x * CELL_W + CELL_W / 2;
+  const cy = gem.y * CELL_H + CELL_H / 2;
   const pulse = 0.5 + 0.5 * Math.sin(t * 5);
 
-  const glowRadius = CELL_SIZE * 0.9 + pulse * 4;
+  const glowRadius = cs * 0.9 + pulse * 4;
   const gradient = ctx.createRadialGradient(cx, cy, 1, cx, cy, glowRadius);
   gradient.addColorStop(0, `rgba(255,255,255,${0.5 + 0.3 * pulse})`);
   gradient.addColorStop(0.4, `rgba(120,220,255,${0.5 + 0.2 * pulse})`);
@@ -259,7 +312,7 @@ function drawGem(gem, t) {
   ctx.arc(cx, cy, glowRadius, 0, Math.PI * 2);
   ctx.fill();
 
-  const s = CELL_SIZE * 0.32;
+  const s = cs * 0.32;
   ctx.save();
   ctx.translate(cx, cy);
   ctx.rotate(Math.PI / 4 + Math.sin(t * 1.5) * 0.15);
@@ -282,13 +335,14 @@ function drawEntities(state, t) {
     drawObstacle(o, t);
   }
 
+  const cs = Math.min(CELL_W, CELL_H);
   ctx.fillStyle = '#f1fa8c';
   for (const f of state.food) {
     ctx.beginPath();
     ctx.arc(
-      f.x * CELL_SIZE + CELL_SIZE / 2,
-      f.y * CELL_SIZE + CELL_SIZE / 2,
-      CELL_SIZE / 3,
+      f.x * CELL_W + CELL_W / 2,
+      f.y * CELL_H + CELL_H / 2,
+      cs / 3,
       0, Math.PI * 2
     );
     ctx.fill();
@@ -304,10 +358,10 @@ function drawEntities(state, t) {
       ctx.fillStyle = `rgba(255,215,60,${0.35 + 0.25 * pulse})`;
       p.body.forEach(seg => {
         ctx.fillRect(
-          seg.x * CELL_SIZE - 2,
-          seg.y * CELL_SIZE - 2,
-          CELL_SIZE + 4,
-          CELL_SIZE + 4
+          seg.x * CELL_W - 2,
+          seg.y * CELL_H - 2,
+          CELL_W + 4,
+          CELL_H + 4
         );
       });
     }
@@ -316,16 +370,16 @@ function drawEntities(state, t) {
     p.body.forEach((seg, i) => {
       const pad = i === 0 ? 1 : 2;
       ctx.fillRect(
-        seg.x * CELL_SIZE + pad,
-        seg.y * CELL_SIZE + pad,
-        CELL_SIZE - pad * 2,
-        CELL_SIZE - pad * 2
+        seg.x * CELL_W + pad,
+        seg.y * CELL_H + pad,
+        CELL_W - pad * 2,
+        CELL_H - pad * 2
       );
     });
 
     const head = p.body[0];
-    const tx = Math.min(canvas.width - 4, Math.max(4, head.x * CELL_SIZE + CELL_SIZE / 2));
-    const ty = Math.max(12, head.y * CELL_SIZE - 6);
+    const tx = Math.min(canvas.width - 4, Math.max(4, head.x * CELL_W + CELL_W / 2));
+    const ty = Math.max(12, head.y * CELL_H - 6);
     const label = p.invincible ? `🛡 ${p.nickname}` : p.nickname;
     ctx.font = 'bold 12px Segoe UI, Arial, sans-serif';
     ctx.textAlign = 'center';

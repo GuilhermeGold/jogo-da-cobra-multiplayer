@@ -4,6 +4,7 @@
   const backFromChallengeMenuBtn = document.getElementById('back-from-challenge-menu-btn');
 
   const challengeScreen = document.getElementById('challenge-screen');
+  const challengeHud = document.getElementById('challenge-hud');
   const challengeTitleEl = document.getElementById('challenge-title');
   const challengeProgressEl = document.getElementById('challenge-progress');
   const challengeTimerEl = document.getElementById('challenge-timer');
@@ -26,6 +27,43 @@
   const SPEED_RAMP_START_MS = 220; // intervalo do primeiro tick da corrida (início mais devagar)
   const SPEED_RAMP_DURATION_MS = 2500; // tempo até a velocidade chegar ao padrão
   const HUNTER_SKIP_EVERY = 5; // a caçadora fica parada 1 a cada 5 ticks, ficando um pouco mais lenta
+
+  let CELL_W = CELL;
+  let CELL_H = CELL;
+
+  function computeChallengeCanvasSize() {
+    const mobile = isMobileLayout();
+    let targetW, targetH;
+    if (mobile) {
+      // no celular a arena estica para preencher quase toda a tela; as células deixam de ser quadradas
+      const viewportW = challengeScreen.getBoundingClientRect().width || window.innerWidth;
+      const viewportH = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+      const hudHeight = challengeHud.getBoundingClientRect().height;
+      const verticalReserve = 32; // gap entre HUD/canvas + margem de segurança
+      targetW = Math.round(Math.max(120, viewportW));
+      targetH = Math.round(Math.max(120, viewportH - hudHeight - verticalReserve));
+    } else {
+      targetW = COLS * CELL;
+      targetH = ROWS * CELL;
+    }
+
+    CELL_W = targetW / COLS;
+    CELL_H = targetH / ROWS;
+    if (challengeCanvas.width === targetW && challengeCanvas.height === targetH) return;
+
+    challengeCanvas.width = targetW;
+    challengeCanvas.height = targetH;
+    if (mobile) {
+      challengeCanvas.style.width = `${targetW}px`;
+      challengeCanvas.style.height = `${targetH}px`;
+    } else {
+      challengeCanvas.style.width = '';
+      challengeCanvas.style.height = '';
+    }
+  }
+
+  window.addEventListener('resize', computeChallengeCanvasSize);
+  window.addEventListener('orientationchange', () => setTimeout(computeChallengeCanvasSize, 300));
 
   const DIRS = {
     up: { x: 0, y: -1 },
@@ -330,9 +368,6 @@
     running = false;
     hunterTickCounter = 0;
 
-    challengeCanvas.width = COLS * CELL;
-    challengeCanvas.height = ROWS * CELL;
-
     challengeTitleEl.textContent = `${challenge.icon} ${challenge.name}`;
     resultOverlay.classList.add('hidden');
 
@@ -343,8 +378,10 @@
 
     challengeScreen.classList.remove('hidden');
     activeMode = 'challenge';
-
+    // define o texto mais longo do HUD ("Começando em X...") antes de medir a altura dele,
+    // para reservar espaço suficiente e a arena não ultrapassar a tela
     beginPrecountdown();
+    computeChallengeCanvasSize();
   }
 
   function beginPrecountdown() {
@@ -534,10 +571,12 @@
   function drawAuroraCell(gx, gy, seed, t) {
     const intensity = 0.5 + 0.5 * Math.sin(t * 1.8 + seed * 0.5);
     const [r, g, b] = lerp(AURORA_DARK, AURORA_BRIGHT, intensity);
+    const padX = CELL_W * 0.15;
+    const padY = CELL_H * 0.15;
     cctx.fillStyle = `rgba(${r},${g},${b},0.85)`;
-    cctx.fillRect(gx * CELL, gy * CELL, CELL, CELL);
+    cctx.fillRect(gx * CELL_W, gy * CELL_H, CELL_W, CELL_H);
     cctx.fillStyle = `rgba(150,120,255,${0.28 * intensity})`;
-    cctx.fillRect(gx * CELL - 3, gy * CELL - 3, CELL + 6, CELL + 6);
+    cctx.fillRect(gx * CELL_W - padX, gy * CELL_H - padY, CELL_W + padX * 2, CELL_H + padY * 2);
   }
 
   function drawBorder(t) {
@@ -552,9 +591,10 @@
   }
 
   function drawObstacleShape(o, t) {
-    const cx = o.x * CELL + CELL / 2, cy = o.y * CELL + CELL / 2;
+    const cs = Math.min(CELL_W, CELL_H);
+    const cx = o.x * CELL_W + CELL_W / 2, cy = o.y * CELL_H + CELL_H / 2;
     const pulse = 0.5 + 0.5 * Math.sin(t * 4 + o.x * 0.7 + o.y * 0.7);
-    const glowR = CELL * 0.9 + pulse * 5;
+    const glowR = cs * 0.9 + pulse * 5;
     const grad = cctx.createRadialGradient(cx, cy, 1, cx, cy, glowR);
     grad.addColorStop(0, `rgba(255,45,170,${0.55 + 0.3 * pulse})`);
     grad.addColorStop(1, 'rgba(255,45,170,0)');
@@ -565,11 +605,11 @@
 
     cctx.fillStyle = '#2b2b2b';
     cctx.beginPath();
-    cctx.moveTo(cx, cy - CELL * 0.45);
-    cctx.lineTo(cx + CELL * 0.42, cy - CELL * 0.08);
-    cctx.lineTo(cx + CELL * 0.28, cy + CELL * 0.45);
-    cctx.lineTo(cx - CELL * 0.28, cy + CELL * 0.45);
-    cctx.lineTo(cx - CELL * 0.42, cy - CELL * 0.08);
+    cctx.moveTo(cx, cy - cs * 0.45);
+    cctx.lineTo(cx + cs * 0.42, cy - cs * 0.08);
+    cctx.lineTo(cx + cs * 0.28, cy + cs * 0.45);
+    cctx.lineTo(cx - cs * 0.28, cy + cs * 0.45);
+    cctx.lineTo(cx - cs * 0.42, cy - cs * 0.08);
     cctx.closePath();
     cctx.fill();
     cctx.lineWidth = 2;
@@ -578,28 +618,30 @@
   }
 
   function drawFood() {
+    const cs = Math.min(CELL_W, CELL_H);
     cctx.fillStyle = '#f1fa8c';
     for (const f of food) {
       cctx.beginPath();
-      cctx.arc(f.x * CELL + CELL / 2, f.y * CELL + CELL / 2, CELL / 3, 0, Math.PI * 2);
+      cctx.arc(f.x * CELL_W + CELL_W / 2, f.y * CELL_H + CELL_H / 2, cs / 3, 0, Math.PI * 2);
       cctx.fill();
     }
   }
 
   function drawCheckpoint(t) {
     if (!checkpoint) return;
-    const cx = checkpoint.x * CELL + CELL / 2, cy = checkpoint.y * CELL + CELL / 2;
+    const cs = Math.min(CELL_W, CELL_H);
+    const cx = checkpoint.x * CELL_W + CELL_W / 2, cy = checkpoint.y * CELL_H + CELL_H / 2;
     const pulse = 0.5 + 0.5 * Math.sin(t * 4);
     cctx.strokeStyle = `rgba(80,250,180,${0.6 + 0.35 * pulse})`;
     cctx.lineWidth = 3;
     cctx.beginPath();
-    cctx.arc(cx, cy, CELL * 0.35 + pulse * 3, 0, Math.PI * 2);
+    cctx.arc(cx, cy, cs * 0.35 + pulse * 3, 0, Math.PI * 2);
     cctx.stroke();
     cctx.fillStyle = '#50fab4';
     cctx.beginPath();
-    cctx.moveTo(cx - 2, cy - CELL * 0.3);
-    cctx.lineTo(cx - 2, cy + CELL * 0.3);
-    cctx.lineTo(cx + CELL * 0.28, cy - CELL * 0.12);
+    cctx.moveTo(cx - 2, cy - cs * 0.3);
+    cctx.lineTo(cx - 2, cy + cs * 0.3);
+    cctx.lineTo(cx + cs * 0.28, cy - cs * 0.12);
     cctx.closePath();
     cctx.fill();
   }
@@ -608,7 +650,7 @@
     body.forEach((seg, i) => {
       const pad = i === 0 ? 1 : 2;
       cctx.fillStyle = color;
-      cctx.fillRect(seg.x * CELL + pad, seg.y * CELL + pad, CELL - pad * 2, CELL - pad * 2);
+      cctx.fillRect(seg.x * CELL_W + pad, seg.y * CELL_H + pad, CELL_W - pad * 2, CELL_H - pad * 2);
     });
   }
 
@@ -617,7 +659,7 @@
     const pulse = 0.5 + 0.5 * Math.sin(t * 6);
     cctx.fillStyle = `rgba(255,50,50,${0.3 + 0.25 * pulse})`;
     hunter.body.forEach(seg => {
-      cctx.fillRect(seg.x * CELL - 2, seg.y * CELL - 2, CELL + 4, CELL + 4);
+      cctx.fillRect(seg.x * CELL_W - 2, seg.y * CELL_H - 2, CELL_W + 4, CELL_H + 4);
     });
     drawSnakeBody(hunter.body, '#d62828');
   }
