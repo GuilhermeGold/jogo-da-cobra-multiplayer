@@ -27,6 +27,9 @@
   const SPEED_RAMP_START_MS = 85; // intervalo do primeiro tick da corrida (início levemente mais devagar)
   const SPEED_RAMP_DURATION_MS = 700; // tempo até a velocidade chegar ao padrão — bem curto, só um "vai!" inicial
   const HUNTER_SKIP_EVERY = 5; // a caçadora fica parada 1 a cada 5 ticks, ficando um pouco mais lenta
+  const SHRINK_STEP_MS = 6000; // a cada X ms, a área segura encolhe mais uma célula de cada lado
+  const SHRINK_MAX = Math.floor(Math.min(COLS, ROWS) / 2) - 7; // deixa uma área jogável mínima no centro
+  const OBSTACLE_MOVE_MS = 600; // velocidade de deslocamento das minas móveis
 
   let CELL_W = CELL;
   let CELL_H = CELL;
@@ -80,7 +83,12 @@
       description: 'Coma 20 bolinhas antes que o tempo acabe.',
       duration: 45,
       type: 'eatFood',
-      target: 20
+      target: 20,
+      difficulties: [
+        { key: 'easy', label: 'Fácil' },
+        { key: 'medium', label: 'Médio', startObstacles: 8, growingObstacles: true },
+        { key: 'hard', label: 'Difícil', startObstacles: 8, growingObstacles: true, hasHunter: true }
+      ]
     },
     {
       id: 'hunter-chase',
@@ -89,7 +97,12 @@
       description: 'Sobreviva 60 segundos fugindo de uma cobra caçadora que te persegue.',
       duration: 60,
       type: 'survive',
-      hasHunter: true
+      hasHunter: true,
+      difficulties: [
+        { key: 'easy', label: 'Fácil' },
+        { key: 'medium', label: 'Médio', startObstacles: 10 },
+        { key: 'hard', label: 'Difícil', startObstacles: 10, shrinkingArena: true }
+      ]
     },
     {
       id: 'checkpoint-rush',
@@ -98,7 +111,12 @@
       description: 'Alcance 8 checkpoints antes que o tempo acabe.',
       duration: 40,
       type: 'checkpoints',
-      target: 8
+      target: 8,
+      difficulties: [
+        { key: 'easy', label: 'Fácil' },
+        { key: 'medium', label: 'Médio', startObstacles: 10 },
+        { key: 'hard', label: 'Difícil', startObstacles: 10, hasHunter: true }
+      ]
     },
     {
       id: 'minefield',
@@ -108,7 +126,13 @@
       duration: 35,
       type: 'eatFood',
       target: 10,
-      fastObstacles: true
+      startObstacles: 4,
+      growingObstacles: true,
+      difficulties: [
+        { key: 'easy', label: 'Fácil' },
+        { key: 'medium', label: 'Médio', movingObstacles: true },
+        { key: 'hard', label: 'Difícil', movingObstacles: true, shrinkingArena: true }
+      ]
     }
   ];
 
@@ -128,6 +152,14 @@
   let precountdownTimer = null;
   let runStartTime = 0;
   let hunterTickCounter = 0;
+  let shrinkMargin = 0;
+  let shrinkTimer = null;
+  let moveObstacleTimer = null;
+  const selectedDifficulty = {};
+
+  function effMargin(base) {
+    return base + (challenge && challenge.shrinkingArena ? shrinkMargin : 0);
+  }
 
   function isFree(x, y) {
     if (food.some(f => f.x === x && f.y === y)) return false;
@@ -148,16 +180,42 @@
   }
 
   function spawnFoodPool(count) {
-    while (food.length < count) food.push(randomEmptyCell(1));
+    while (food.length < count) food.push(randomEmptyCell(effMargin(1)));
   }
 
   function spawnObstacle() {
     if (obstacles.length >= OBSTACLE_CAP) return;
-    obstacles.push(randomEmptyCell(2));
+    const cell = randomEmptyCell(effMargin(2));
+    if (challenge && challenge.movingObstacles) {
+      const dirKeys = Object.keys(DIRS);
+      cell.dir = DIRS[dirKeys[Math.floor(Math.random() * dirKeys.length)]];
+    }
+    obstacles.push(cell);
+  }
+
+  function moveObstacles() {
+    const minB = 1 + shrinkMargin;
+    const maxX = COLS - 2 - shrinkMargin;
+    const maxY = ROWS - 2 - shrinkMargin;
+    for (const o of obstacles) {
+      if (!o.dir) continue;
+      let nx = o.x + o.dir.x;
+      let ny = o.y + o.dir.y;
+      if (nx <= minB || nx >= maxX || ny <= minB || ny >= maxY) {
+        o.dir = { x: -o.dir.x, y: -o.dir.y };
+        nx = o.x + o.dir.x;
+        ny = o.y + o.dir.y;
+      }
+      const blocked = obstacles.some(other => other !== o && other.x === nx && other.y === ny);
+      if (!blocked && nx > minB && nx < maxX && ny > minB && ny < maxY) {
+        o.x = nx;
+        o.y = ny;
+      }
+    }
   }
 
   function spawnCheckpoint() {
-    checkpoint = randomEmptyCell(3);
+    checkpoint = randomEmptyCell(effMargin(3));
   }
 
   function hunterStep() {
@@ -167,11 +225,12 @@
     const opts = [DIRS.up, DIRS.down, DIRS.left, DIRS.right].filter(
       d => !(d.x === -cur.x && d.y === -cur.y)
     );
+    const m = challenge && challenge.shrinkingArena ? shrinkMargin : 0;
     let best = null;
     let bestDist = Infinity;
     for (const d of opts) {
       const nx = head.x + d.x, ny = head.y + d.y;
-      if (nx <= 0 || nx >= COLS - 1 || ny <= 0 || ny >= ROWS - 1) continue;
+      if (nx <= m || nx >= COLS - 1 - m || ny <= m || ny >= ROWS - 1 - m) continue;
       if (obstacles.some(o => o.x === nx && o.y === ny)) continue;
       if (hunter.body.slice(0, -1).some(s => s.x === nx && s.y === ny)) continue;
       const dist = Math.abs(nx - target.x) + Math.abs(ny - target.y);
@@ -212,6 +271,8 @@
     clearInterval(countdownTimer);
     clearInterval(obstacleTimer);
     clearInterval(precountdownTimer);
+    clearInterval(shrinkTimer);
+    clearInterval(moveObstacleTimer);
     precountdown = null;
   }
 
@@ -219,18 +280,18 @@
     return challenge.duration * 1000 - timeLeftMs;
   }
 
-  function loadBest(id) {
+  function loadBest(id, difficultyKey) {
     try {
-      return JSON.parse(localStorage.getItem('snakeChallengeBest_' + id)) || { completed: false, bestMs: null };
+      return JSON.parse(localStorage.getItem('snakeChallengeBest_' + id + '_' + difficultyKey)) || { completed: false, bestMs: null };
     } catch (e) {
       return { completed: false, bestMs: null };
     }
   }
 
-  function saveBest(id, elapsed) {
-    const cur = loadBest(id);
+  function saveBest(id, difficultyKey, elapsed) {
+    const cur = loadBest(id, difficultyKey);
     const bestMs = cur.bestMs == null ? elapsed : Math.min(cur.bestMs, elapsed);
-    localStorage.setItem('snakeChallengeBest_' + id, JSON.stringify({ completed: true, bestMs }));
+    localStorage.setItem('snakeChallengeBest_' + id + '_' + difficultyKey, JSON.stringify({ completed: true, bestMs }));
   }
 
   function showResult(success, title, detail) {
@@ -248,7 +309,7 @@
   function succeed() {
     stopTimers();
     const elapsed = elapsedMs();
-    saveBest(challenge.id, elapsed);
+    saveBest(challenge.id, challenge.difficultyKey, elapsed);
     const detail = challenge.type === 'survive'
       ? 'Você sobreviveu o tempo todo!'
       : `Concluído em ${(elapsed / 1000).toFixed(1)}s.`;
@@ -260,9 +321,10 @@
     snake.dir = snake.pendingDir;
     const head = snake.body[0];
     const nh = { x: head.x + snake.dir.x, y: head.y + snake.dir.y };
+    const m = challenge.shrinkingArena ? shrinkMargin : 0;
 
-    if (nh.x <= 0 || nh.x >= COLS - 1 || nh.y <= 0 || nh.y >= ROWS - 1) {
-      fail('Você bateu na borda!');
+    if (nh.x <= m || nh.x >= COLS - 1 - m || nh.y <= m || nh.y >= ROWS - 1 - m) {
+      fail(m > 0 ? 'A área segura fechou em cima de você!' : 'Você bateu na borda!');
       return;
     }
     if (obstacles.some(o => o.x === nh.x && o.y === nh.y)) {
@@ -333,9 +395,14 @@
     updateHud();
   }
 
-  function startChallenge(id) {
-    challenge = CHALLENGES.find(c => c.id === id);
-    if (!challenge) return;
+  function startChallenge(id, difficultyKey) {
+    const base = CHALLENGES.find(c => c.id === id);
+    if (!base) return;
+    const diffDef = base.difficulties.find(d => d.key === difficultyKey) || base.difficulties[0];
+    challenge = Object.assign({}, base, diffDef, {
+      difficultyKey: diffDef.key,
+      difficultyLabel: diffDef.label
+    });
 
     food = [];
     obstacles = [];
@@ -343,6 +410,7 @@
     hunter = null;
     snake = null;
     progress = 0;
+    shrinkMargin = 0;
 
     const dirKeys = Object.keys(DIRS);
     const startDir = DIRS[dirKeys[Math.floor(Math.random() * dirKeys.length)]];
@@ -362,19 +430,21 @@
     if (challenge.type === 'eatFood') spawnFoodPool(8);
     if (challenge.type === 'checkpoints') spawnCheckpoint();
 
-    for (let i = 0; i < 4; i++) spawnObstacle();
+    for (let i = 0; i < (challenge.startObstacles || 0); i++) spawnObstacle();
 
     timeLeftMs = challenge.duration * 1000;
     running = false;
     hunterTickCounter = 0;
 
-    challengeTitleEl.textContent = `${challenge.icon} ${challenge.name}`;
+    challengeTitleEl.textContent = `${challenge.icon} ${challenge.name} — ${challenge.difficultyLabel}`;
     resultOverlay.classList.add('hidden');
 
     clearTimeout(tickTimer);
     clearInterval(countdownTimer);
     clearInterval(obstacleTimer);
     clearInterval(precountdownTimer);
+    clearInterval(shrinkTimer);
+    clearInterval(moveObstacleTimer);
 
     challengeScreen.classList.remove('hidden');
     activeMode = 'challenge';
@@ -423,19 +493,33 @@
     clearTimeout(tickTimer);
     clearInterval(countdownTimer);
     clearInterval(obstacleTimer);
+    clearInterval(shrinkTimer);
+    clearInterval(moveObstacleTimer);
     scheduleTick();
     countdownTimer = setInterval(countdownStep, 100);
-    if (challenge.fastObstacles) {
+    if (challenge.growingObstacles) {
       obstacleTimer = setInterval(() => {
         if (running) spawnObstacle();
       }, 1200);
+    }
+    if (challenge.shrinkingArena) {
+      shrinkTimer = setInterval(() => {
+        if (running && shrinkMargin < SHRINK_MAX) shrinkMargin += 1;
+      }, SHRINK_STEP_MS);
+    }
+    if (challenge.movingObstacles) {
+      moveObstacleTimer = setInterval(() => {
+        if (running) moveObstacles();
+      }, OBSTACLE_MOVE_MS);
     }
   }
 
   function renderChallengeMenu() {
     challengeListEl.innerHTML = '';
     for (const c of CHALLENGES) {
-      const best = loadBest(c.id);
+      if (!selectedDifficulty[c.id]) selectedDifficulty[c.id] = c.difficulties[0].key;
+      const activeDiff = selectedDifficulty[c.id];
+      const best = loadBest(c.id, activeDiff);
       const card = document.createElement('div');
       card.className = 'challenge-card';
 
@@ -454,6 +538,20 @@
       desc.className = 'challenge-card-desc';
       desc.textContent = c.description;
 
+      const diffRow = document.createElement('div');
+      diffRow.className = 'challenge-card-difficulty';
+      for (const d of c.difficulties) {
+        const dBtn = document.createElement('button');
+        dBtn.type = 'button';
+        dBtn.className = 'difficulty-btn' + (d.key === activeDiff ? ' active' : '');
+        dBtn.textContent = d.label;
+        dBtn.addEventListener('click', () => {
+          selectedDifficulty[c.id] = d.key;
+          renderChallengeMenu();
+        });
+        diffRow.appendChild(dBtn);
+      }
+
       const meta = document.createElement('div');
       meta.className = 'challenge-card-meta';
       let metaText = `⏱ ${c.duration}s`;
@@ -466,6 +564,7 @@
 
       body.appendChild(name);
       body.appendChild(desc);
+      body.appendChild(diffRow);
       body.appendChild(meta);
 
       const playBtn = document.createElement('button');
@@ -474,7 +573,7 @@
       playBtn.textContent = 'Jogar';
       playBtn.addEventListener('click', () => {
         challengeMenuScreen.classList.add('hidden');
-        startChallenge(c.id);
+        startChallenge(c.id, selectedDifficulty[c.id]);
       });
 
       card.appendChild(icon);
@@ -504,7 +603,7 @@
 
   retryBtn.addEventListener('click', () => {
     resultOverlay.classList.add('hidden');
-    startChallenge(challenge.id);
+    startChallenge(challenge.id, challenge.difficultyKey);
   });
 
   menuReturnBtn.addEventListener('click', () => {
@@ -707,10 +806,28 @@
     cctx.restore();
   }
 
+  function drawShrinkZone(t) {
+    if (!challenge || !challenge.shrinkingArena || shrinkMargin <= 0) return;
+    const bandW = shrinkMargin * CELL_W;
+    const bandH = shrinkMargin * CELL_H;
+    const pulse = 0.5 + 0.5 * Math.sin(t * 3);
+    cctx.save();
+    cctx.fillStyle = `rgba(255,50,50,${0.16 + 0.08 * pulse})`;
+    cctx.fillRect(0, 0, challengeCanvas.width, bandH);
+    cctx.fillRect(0, challengeCanvas.height - bandH, challengeCanvas.width, bandH);
+    cctx.fillRect(0, 0, bandW, challengeCanvas.height);
+    cctx.fillRect(challengeCanvas.width - bandW, 0, bandW, challengeCanvas.height);
+    cctx.strokeStyle = `rgba(255,90,90,${0.65 + 0.3 * pulse})`;
+    cctx.lineWidth = 2;
+    cctx.strokeRect(bandW, bandH, challengeCanvas.width - bandW * 2, challengeCanvas.height - bandH * 2);
+    cctx.restore();
+  }
+
   function render(t) {
     if (!challengeCanvas.width || !challengeCanvas.height) return;
     drawBackground(t);
     drawBorder(t);
+    drawShrinkZone(t);
     for (const o of obstacles) drawObstacleShape(o, t);
     drawFood();
     drawCheckpoint(t);

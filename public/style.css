@@ -312,6 +312,33 @@ body {
   color: #8be9fd;
 }
 
+.challenge-card-difficulty {
+  display: flex;
+  gap: 0.35rem;
+  margin: 0.35rem 0;
+}
+
+.difficulty-btn {
+  padding: 0.25rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid #44475a;
+  background: #1e1f29;
+  color: #f8f8f2;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.difficulty-btn:hover {
+  border-color: #6272a4;
+}
+
+.difficulty-btn.active {
+  background: #8be9fd;
+  color: #1e1f29;
+  font-weight: bold;
+  border-color: #8be9fd;
+}
+
 .challenge-card-play {
   flex-shrink: 0;
   padding: 0.5rem 1rem;
@@ -461,6 +488,10 @@ body {
   }
 
   .challenge-card {
+    flex-wrap: wrap;
+  }
+
+  .challenge-card-difficulty {
     flex-wrap: wrap;
   }
 
