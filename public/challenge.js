@@ -19,8 +19,8 @@
   const menuReturnBtn = document.getElementById('challenge-menu-return-btn');
 
   const CELL = 20;
-  const COLS = 34;
-  const ROWS = 24;
+  const COLS = 48;
+  const ROWS = 32;
   const TICK_MS = 55; // intervalo entre passos da cobra em velocidade padrão (resposta às setas o mais rápida possível)
   const OBSTACLE_CAP = 20;
   const PRECOUNTDOWN_SECONDS = 3;
@@ -522,8 +522,14 @@
   }
 
   window.addEventListener('keydown', e => {
+    if (activeMode !== 'challenge') return;
+    if (e.key === 'Enter' && !resultOverlay.classList.contains('hidden')) {
+      e.preventDefault();
+      retryBtn.click();
+      return;
+    }
     const dirName = KEY_TO_DIRECTION[e.key];
-    if (!dirName || activeMode !== 'challenge') return;
+    if (!dirName) return;
     e.preventDefault();
     trySetDirection(dirName);
   });
