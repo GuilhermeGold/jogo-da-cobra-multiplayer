@@ -15,6 +15,8 @@ app.get('/health', (_req, res) => res.status(200).send('ok'));
 const GRID_COLS = 60;
 const GRID_ROWS = 40;
 const TICK_RATE_MS = 90;
+const SPEED_RAMP_START_MS = 260; // intervalo do primeiro tick da rodada (início mais devagar)
+const SPEED_RAMP_DURATION_MS = 3000; // tempo até a velocidade chegar ao padrão
 const MAX_PLAYERS = 8;
 const MIN_PLAYERS_TO_START = 2;
 const FOOD_COUNT = 25;
@@ -53,6 +55,7 @@ let roundTimer = null;
 let obstacleTimer = null;
 let gemTimer = null;
 let tickInterval = null;
+let roundStartTime = 0;
 
 function isCellFree(x, y, ignoreFood = false) {
   if (!ignoreFood && food.some(f => f.x === x && f.y === y)) return false;
@@ -155,8 +158,16 @@ function clearRoundTimer() {
 
 function startCountdown() {
   roundState = 'countdown';
+  food = [];
+  obstacles = [];
+  gem = null;
+  // posiciona as cobras já na contagem regressiva, para que todos vejam onde cada uma está antes do início
+  for (const p of players.values()) {
+    spawnPlayer(p);
+  }
   let remaining = COUNTDOWN_SECONDS;
   broadcastRoundEvent('countdown', { seconds: remaining });
+  io.emit('state', serializeState());
   clearRoundTimer();
   const step = () => {
     remaining -= 1;
@@ -171,14 +182,9 @@ function startCountdown() {
 }
 
 function startRound() {
-  food = [];
-  obstacles = [];
-  gem = null;
-  for (const p of players.values()) {
-    spawnPlayer(p);
-  }
   spawnFood();
   roundState = 'playing';
+  roundStartTime = Date.now();
   broadcastRoundEvent('start');
   startObstacleTimer();
   startGemTimer();
@@ -402,7 +408,22 @@ io.on('connection', socket => {
   });
 });
 
-tickInterval = setInterval(tick, TICK_RATE_MS);
+function currentTickDelay() {
+  if (roundState !== 'playing') return TICK_RATE_MS;
+  const elapsed = Date.now() - roundStartTime;
+  if (elapsed >= SPEED_RAMP_DURATION_MS) return TICK_RATE_MS;
+  const t = elapsed / SPEED_RAMP_DURATION_MS;
+  return SPEED_RAMP_START_MS + (TICK_RATE_MS - SPEED_RAMP_START_MS) * t;
+}
+
+function scheduleTick() {
+  tickInterval = setTimeout(() => {
+    tick();
+    scheduleTick();
+  }, currentTickDelay());
+}
+
+scheduleTick();
 
 const PORT = process.env.PORT || 3000;
 httpServer.listen(PORT, () => {

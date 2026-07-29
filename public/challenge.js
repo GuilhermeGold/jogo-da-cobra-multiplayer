@@ -22,6 +22,10 @@
   const ROWS = 24;
   const TICK_MS = 90;
   const OBSTACLE_CAP = 20;
+  const PRECOUNTDOWN_SECONDS = 3;
+  const SPEED_RAMP_START_MS = 220; // intervalo do primeiro tick da corrida (início mais devagar)
+  const SPEED_RAMP_DURATION_MS = 2500; // tempo até a velocidade chegar ao padrão
+  const HUNTER_SKIP_EVERY = 5; // a caçadora fica parada 1 a cada 5 ticks, ficando um pouco mais lenta
 
   const DIRS = {
     up: { x: 0, y: -1 },
@@ -82,6 +86,10 @@
   let tickTimer = null;
   let countdownTimer = null;
   let obstacleTimer = null;
+  let precountdown = null;
+  let precountdownTimer = null;
+  let runStartTime = 0;
+  let hunterTickCounter = 0;
 
   function isFree(x, y) {
     if (food.some(f => f.x === x && f.y === y)) return false;
@@ -142,6 +150,12 @@
   }
 
   function updateHud() {
+    if (precountdown != null) {
+      challengeTimerEl.textContent = `Começando em ${precountdown}...`;
+      challengeTimerEl.classList.remove('low-time');
+      challengeProgressEl.textContent = 'Prepare-se...';
+      return;
+    }
     const secs = Math.ceil(timeLeftMs / 1000);
     challengeTimerEl.textContent = `⏱ ${secs}s`;
     challengeTimerEl.classList.toggle('low-time', secs <= 10);
@@ -156,9 +170,11 @@
 
   function stopTimers() {
     running = false;
-    clearInterval(tickTimer);
+    clearTimeout(tickTimer);
     clearInterval(countdownTimer);
     clearInterval(obstacleTimer);
+    clearInterval(precountdownTimer);
+    precountdown = null;
   }
 
   function elapsedMs() {
@@ -221,7 +237,10 @@
     }
 
     if (hunter) {
-      hunterStep();
+      hunterTickCounter += 1;
+      if (hunterTickCounter % HUNTER_SKIP_EVERY !== 0) {
+        hunterStep();
+      }
       if (hunter.body.some(s => s.x === nh.x && s.y === nh.y)) {
         fail('A caçadora te pegou!');
         return;
@@ -308,28 +327,72 @@
     for (let i = 0; i < 4; i++) spawnObstacle();
 
     timeLeftMs = challenge.duration * 1000;
-    running = true;
+    running = false;
+    hunterTickCounter = 0;
 
     challengeCanvas.width = COLS * CELL;
     challengeCanvas.height = ROWS * CELL;
 
     challengeTitleEl.textContent = `${challenge.icon} ${challenge.name}`;
     resultOverlay.classList.add('hidden');
-    updateHud();
 
-    clearInterval(tickTimer);
+    clearTimeout(tickTimer);
     clearInterval(countdownTimer);
     clearInterval(obstacleTimer);
-    tickTimer = setInterval(tick, TICK_MS);
+    clearInterval(precountdownTimer);
+
+    challengeScreen.classList.remove('hidden');
+    activeMode = 'challenge';
+
+    beginPrecountdown();
+  }
+
+  function beginPrecountdown() {
+    // mostra a cobra (e a caçadora, se houver) já posicionadas no mapa antes de começar a mover
+    precountdown = PRECOUNTDOWN_SECONDS;
+    updateHud();
+    clearInterval(precountdownTimer);
+    precountdownTimer = setInterval(() => {
+      precountdown -= 1;
+      if (precountdown <= 0) {
+        clearInterval(precountdownTimer);
+        precountdown = null;
+        beginRun();
+      } else {
+        updateHud();
+      }
+    }, 1000);
+  }
+
+  function currentTickDelay() {
+    if (!running) return TICK_MS;
+    const elapsed = Date.now() - runStartTime;
+    if (elapsed >= SPEED_RAMP_DURATION_MS) return TICK_MS;
+    const t = elapsed / SPEED_RAMP_DURATION_MS;
+    return SPEED_RAMP_START_MS + (TICK_MS - SPEED_RAMP_START_MS) * t;
+  }
+
+  function scheduleTick() {
+    tickTimer = setTimeout(() => {
+      tick();
+      if (running) scheduleTick();
+    }, currentTickDelay());
+  }
+
+  function beginRun() {
+    running = true;
+    runStartTime = Date.now();
+    updateHud();
+    clearTimeout(tickTimer);
+    clearInterval(countdownTimer);
+    clearInterval(obstacleTimer);
+    scheduleTick();
     countdownTimer = setInterval(countdownStep, 100);
     if (challenge.fastObstacles) {
       obstacleTimer = setInterval(() => {
         if (running) spawnObstacle();
       }, 1200);
     }
-
-    challengeScreen.classList.remove('hidden');
-    activeMode = 'challenge';
   }
 
   function renderChallengeMenu() {
@@ -559,6 +622,19 @@
     drawSnakeBody(hunter.body, '#d62828');
   }
 
+  function drawPrecountdownOverlay() {
+    if (precountdown == null) return;
+    cctx.save();
+    cctx.fillStyle = 'rgba(0,0,0,0.45)';
+    cctx.fillRect(0, 0, challengeCanvas.width, challengeCanvas.height);
+    cctx.fillStyle = '#f1fa8c';
+    cctx.font = 'bold 100px Segoe UI, Arial, sans-serif';
+    cctx.textAlign = 'center';
+    cctx.textBaseline = 'middle';
+    cctx.fillText(String(precountdown), challengeCanvas.width / 2, challengeCanvas.height / 2);
+    cctx.restore();
+  }
+
   function render(t) {
     if (!challengeCanvas.width || !challengeCanvas.height) return;
     drawBackground(t);
@@ -568,6 +644,7 @@
     drawCheckpoint(t);
     drawHunter(t);
     if (snake) drawSnakeBody(snake.body, '#50fa7b');
+    drawPrecountdownOverlay();
   }
 
   function frame(ts) {
