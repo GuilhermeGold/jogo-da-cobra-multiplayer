@@ -16,7 +16,7 @@ const GRID_COLS = 60;
 const GRID_ROWS = 40;
 const TICK_RATE_MS = 55; // intervalo entre passos da cobra em velocidade padrão (resposta às setas o mais rápida possível)
 const SPEED_RAMP_START_MS = 85; // intervalo do primeiro tick da rodada (início levemente mais devagar)
-const SPEED_RAMP_DURATION_MS = 700; // tempo até a velocidade chegar ao padrão — bem curto, só um "vai!" inicial
+const SPEED_RAMP_DURATION_MS = 3000; // tempo até a velocidade chegar ao padrão — ramp mais gradual, dá um "vai!" perceptível
 const WIN_SCORE_CLASSIC = 100; // pontuação para vencer a partida no modo Clássico
 const WIN_SCORE_SURVIVAL = 10; // pontuação para vencer a partida no modo Sobrevivência
 const MAX_PLAYERS = 8;
@@ -272,10 +272,17 @@ function tick() {
       const isSelf = other.id === p.id;
       const bodyToCheck = isSelf ? other.body.slice(0, -1) : other.body;
       if (bodyToCheck.some(seg => seg.x === head.x && seg.y === head.y)) {
-        // a gema torna o jogador imune a colisões com OUTROS jogadores, não consigo mesmo
-        if (isSelf || now >= p.invincibleUntil) {
+        if (isSelf) {
           deaths.add(p.id);
+          continue;
         }
+        // a gema torna o jogador imune a colisões com OUTROS jogadores, não comigo mesmo;
+        // e qualquer toque (de qualquer lado, mesmo sem ser cabeça-com-cabeça) na cobra com a
+        // estrela é fatal para quem não está protegido, mesmo que a cobra com estrela tenha sido quem se moveu
+        const pInvincible = now < p.invincibleUntil;
+        const otherInvincible = now < other.invincibleUntil;
+        if (!pInvincible) deaths.add(p.id);
+        if (!otherInvincible && pInvincible) deaths.add(other.id);
       }
     }
   }
@@ -432,8 +439,9 @@ io.on('connection', socket => {
     if (!player || !player.alive) return;
     const newDir = DIRECTIONS[dirName];
     if (!newDir) return;
-    // impede reverter diretamente sobre o próprio corpo
-    if (newDir.x === -player.dir.x && newDir.y === -player.dir.y) return;
+    // compara com pendingDir (última direção pedida, ainda não aplicada), não com dir (já aplicada),
+    // senão uma segunda curva rápida em sequência é rejeitada por parecer reversa da direção antiga
+    if (newDir.x === -player.pendingDir.x && newDir.y === -player.pendingDir.y) return;
     player.pendingDir = newDir;
   });
 

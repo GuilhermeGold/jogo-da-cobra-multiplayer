@@ -485,7 +485,10 @@ function sendDirection(dirName) {
   if (!vec) return;
   const myPlayer = latestState && latestState.players.find(p => p.id === myId);
   const actual = myPlayer ? getActualDir(myPlayer) : null;
-  if (actual && vec.x === -actual.x && vec.y === -actual.y) return; // impede reverter, igual ao servidor
+  // usa localPendingDir (última direção pedida) como referência, não a direção real do corpo,
+  // que ainda está desatualizada no meio de uma curva rápida em sequência
+  const reference = localPendingDir || actual;
+  if (reference && vec.x === -reference.x && vec.y === -reference.y) return; // impede reverter, igual ao servidor
   localPendingDir = vec;
   socket.emit('direction', dirName);
 }

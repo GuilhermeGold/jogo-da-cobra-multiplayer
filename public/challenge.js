@@ -25,7 +25,7 @@
   const OBSTACLE_CAP = 20;
   const PRECOUNTDOWN_SECONDS = 3;
   const SPEED_RAMP_START_MS = 85; // intervalo do primeiro tick da corrida (início levemente mais devagar)
-  const SPEED_RAMP_DURATION_MS = 700; // tempo até a velocidade chegar ao padrão — bem curto, só um "vai!" inicial
+  const SPEED_RAMP_DURATION_MS = 3000; // tempo até a velocidade chegar ao padrão — ramp mais gradual, dá um "vai!" perceptível
   const HUNTER_SKIP_EVERY = 5; // a caçadora fica parada 1 a cada 5 ticks, ficando um pouco mais lenta
   const SHRINK_STEP_MS = 6000; // a cada X ms, a área segura encolhe mais uma célula de cada lado
   const SHRINK_MAX = Math.floor(Math.min(COLS, ROWS) / 2) - 7; // deixa uma área jogável mínima no centro
@@ -616,7 +616,9 @@
     if (activeMode !== 'challenge' || !running || !snake) return;
     const nd = DIRS[dirName];
     if (!nd) return;
-    if (nd.x === -snake.dir.x && nd.y === -snake.dir.y) return;
+    // compara com pendingDir (última direção pedida, ainda não aplicada), não com dir (já aplicada),
+    // senão uma segunda curva rápida em sequência é rejeitada por parecer reversa da direção antiga
+    if (nd.x === -snake.pendingDir.x && nd.y === -snake.pendingDir.y) return;
     snake.pendingDir = nd;
   }
 
